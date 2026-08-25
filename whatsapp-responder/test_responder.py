@@ -637,3 +637,13 @@ def test_times_from_the_bridge_compare_without_exploding():
 
 def test_ahora_is_always_aware():
     assert wa.ahora().tzinfo is not None
+
+
+def test_the_hourly_cap_does_not_apply_to_the_owner(state, sent, monkeypatch):
+    """El tope frena bucles con desconocidos. Aplicárselo al dueño lo deja
+    mudo a media conversación con su propio asistente."""
+    monkeypatch.setattr(responder.agent, "reply", lambda chat, text, **k: "Dígame.")
+    for _ in range(50):
+        state.record_reply(f"{OWNER}@s.whatsapp.net")
+    responder.handle(msg(OWNER, "sigues ahí?"), CONFIG, state, OWNER)
+    assert sent and sent[-1][1] == "Dígame."

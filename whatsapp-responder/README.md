@@ -179,7 +179,9 @@ historial ya sincronizado.
 
 - No responde nunca a sus propios mensajes (`is_from_me`), que sería un bucle infinito.
 - No responde en grupos salvo que lo actives.
-- Tope de respuestas por contacto y hora.
+- Tope de respuestas por contacto y hora, **solo para terceros**: al dueño no
+  se le aplica. El tope frena bucles con desconocidos; dejar mudo al dueño a
+  media conversación con su propio asistente no tiene defensa.
 - No repite el saludo dentro del período de enfriamiento.
 - La marca de agua avanza aunque un mensaje falle, para que uno problemático no
   atasque el asistente para siempre.
@@ -187,9 +189,22 @@ historial ya sincronizado.
 ## Pruebas
 
 ```bash
-uv run pytest -q          # 49 pruebas
+uv run pytest -q          # 54 pruebas
 uv run responder.py --once   # procesa lo pendiente y sale
 ```
+
+## Aquiles insiste en algo que ya está arreglado
+
+Si sigue diciendo que no puede escucharte cuando la transcripción ya funciona,
+no es un fallo técnico: recuerda los avisos de cuando sí fallaba y está siendo
+coherente con eso. Bórrale la memoria:
+
+```bash
+make olvidar                          # toda
+make olvidar OLVIDAR=584241983140     # solo la de un contacto
+```
+
+No toca la sesión de WhatsApp, ni tus mensajes, ni las reuniones apuntadas.
 
 ## Aquiles no me contesta
 

@@ -311,12 +311,19 @@ def handle(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -> None:
         log.info("  -> es un grupo, lo ignoro (limits.reply_in_groups = false)")
         return
 
-    cap = limits.get("max_replies_per_contact_per_hour", 6)
-    if state.replies_last_hour(msg.chat_jid) >= cap:
-        log.warning("  -> tope horario alcanzado (%d/h), no respondo", cap)
-        return
+    del_dueño = is_owner(msg, owner_phone)
 
-    if is_owner(msg, owner_phone):
+    # El tope horario existe para frenar bucles con desconocidos. Al dueño no
+    # se le aplica: es una persona escribiendo, no un bucle, y quedarse mudo a
+    # media conversación con quien manda el asistente no tiene defensa. Los
+    # mensajes propios ya se descartan antes por is_from_me.
+    if not del_dueño:
+        cap = limits.get("max_replies_per_contact_per_hour", 6)
+        if state.replies_last_hour(msg.chat_jid) >= cap:
+            log.warning("  -> tope horario alcanzado (%d/h), no respondo", cap)
+            return
+
+    if del_dueño:
         log.info("  -> es el dueño, va al modelo")
         reply_to_owner(msg, cfg, state)
     else:
