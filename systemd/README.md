@@ -3,10 +3,13 @@
 Servicios de usuario: no hacen falta permisos de root y arrancan con tu sesión.
 
 ```bash
-# 1. La clave de la API, fuera del repositorio
+# 1. La clave de la API, fuera del repositorio.
+#    Escríbela con un editor, no con echo: así no queda en el historial
+#    de bash y no te arriesgas a copiar el ejemplo literal.
 mkdir -p ~/.config/aquiles
-echo 'ANTHROPIC_API_KEY=sk-ant-...' > ~/.config/aquiles/env
+nano ~/.config/aquiles/env      # una línea: ANTHROPIC_API_KEY=sk-ant-api03-...
 chmod 600 ~/.config/aquiles/env
+#    Sin "export": systemd solo entiende CLAVE=valor.
 
 # 2. Instalar los servicios
 mkdir -p ~/.config/systemd/user

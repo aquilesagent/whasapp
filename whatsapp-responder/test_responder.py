@@ -398,3 +398,41 @@ def test_placeholder_keys_are_detected():
 def test_a_real_looking_key_passes():
     real = "sk-ant-api03-" + "A1b2C3d4E5f6G7h8" * 5
     assert not responder.looks_like_placeholder(real)
+
+
+# --------------------------------------------------------------------------
+# La clave leída de disco
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("linea", [
+    "ANTHROPIC_API_KEY=sk-ant-api03-REAL",          # forma de systemd
+    'export ANTHROPIC_API_KEY="sk-ant-api03-REAL"',  # forma que se copia de guías
+    "export ANTHROPIC_API_KEY='sk-ant-api03-REAL'",
+    "  ANTHROPIC_API_KEY = sk-ant-api03-REAL  ",
+])
+def test_key_is_read_from_file_in_either_form(tmp_path, monkeypatch, linea):
+    """systemd solo acepta KEY=valor; las guías enseñan `export`. Aceptar
+    ambas evita que el asistente falle por una diferencia de sintaxis."""
+    env = tmp_path / "env"
+    env.write_text(f"# comentario\n\n{linea}\n", encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    assert responder.load_env_file() == str(env)
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-api03-REAL"
+
+
+def test_the_environment_wins_over_the_file(tmp_path, monkeypatch):
+    env = tmp_path / "env"
+    env.write_text("ANTHROPIC_API_KEY=del-fichero\n", encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "del-entorno")
+
+    assert responder.load_env_file() is None
+    assert os.environ["ANTHROPIC_API_KEY"] == "del-entorno"
+
+
+def test_a_missing_file_is_not_an_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(responder, "ENV_FILES", (str(tmp_path / "no-existe"),))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert responder.load_env_file() is None

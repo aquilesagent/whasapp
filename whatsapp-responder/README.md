@@ -230,16 +230,21 @@ Dentro, una sola línea con tu clave de verdad (la larga, sin comillas):
 ANTHROPIC_API_KEY=sk-ant-api03-la-tuya-entera
 ```
 
-Guarda (`Ctrl-O`, `Enter`, `Ctrl-X`) y engánchala a tus terminales:
+Guarda (`Ctrl-O`, `Enter`, `Ctrl-X`) y protégelo:
 
 ```bash
 chmod 600 ~/.config/aquiles/env
-echo 'set -a; . ~/.config/aquiles/env; set +a' >> ~/.bashrc
-source ~/.bashrc
 ```
 
-Ese mismo fichero es el que leen los servicios de systemd, así que sirve para
-las dos formas de arrancarlo.
+**Ya está.** El respondedor lee ese fichero él mismo al arrancar, así que no
+hace falta tocar `.bashrc` ni reabrir la terminal. Es también el fichero que
+leen los servicios de systemd, de modo que sirve para las dos formas de
+arrancarlo.
+
+Si prefieres tenerla en el entorno, `export ANTHROPIC_API_KEY=...` sigue
+funcionando y tiene prioridad sobre el fichero. Y si escribes `export` dentro
+del fichero también se acepta — aunque systemd no lo entiende, así que para
+los servicios déjalo sin `export`.
 
 **6. Un tercero solo recibió el saludo y nada más.** Comprueba
 `[public].enabled = true`. Con `false`, tras el saludo se calla.

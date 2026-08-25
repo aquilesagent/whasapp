@@ -75,6 +75,53 @@ def load_config(path: str = CONFIG_PATH) -> dict:
     return cfg
 
 
+ENV_FILES = (
+    os.path.expanduser("~/.config/aquiles/env"),
+    os.path.join(BASE_DIR, ".env"),
+)
+
+
+def load_env_file() -> str | None:
+    """Carga ANTHROPIC_API_KEY de disco si no está ya en el entorno.
+
+    Sin esto, que funcione depende de si la variable llegó a *esta* terminal
+    concreta — y no llega si se editó .bashrc y no se reabrió la shell, o si
+    lo arranca un servicio. Leer el fichero directamente quita ese paso de
+    en medio.
+
+    Tolera las dos formas que se escriben en la práctica:
+        ANTHROPIC_API_KEY=sk-ant-...
+        export ANTHROPIC_API_KEY="sk-ant-..."
+    La primera es la única que acepta systemd; la segunda es la que sale al
+    copiar de una guía. Aquí valen ambas.
+    """
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+
+    for path in ENV_FILES:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                lines = fh.readlines()
+        except OSError:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].lstrip()
+            name, _, value = line.partition("=")
+            if name.strip() != "ANTHROPIC_API_KEY":
+                continue
+            value = value.strip().strip('"').strip("'")
+            if value:
+                os.environ["ANTHROPIC_API_KEY"] = value
+                return path
+    return None
+
+
 def looks_like_placeholder(key: str) -> bool:
     """Detecta que se ha copiado el ejemplo de la documentacion en vez de la
     clave real.
@@ -343,6 +390,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
 
+    from_file = load_env_file()
     cfg = load_config()
 
     if args.check:
@@ -373,12 +421,14 @@ def main(argv: list[str] | None = None) -> int:
             print("              Copiaste el ejemplo literal. Pon la clave de")
             print("              verdad, la larga que empieza por sk-ant-api")
         elif key:
-            print("  API key:    presente")
+            origen = f"leída de {from_file}" if from_file else "del entorno"
+            print(f"  API key:    presente ({origen})")
         else:
             print("  API key:    AUSENTE — SIN ESTO NO RESPONDE NADIE")
             print("              consíguela en https://console.anthropic.com")
             print("              (no es tu suscripción a Claude: es aparte)")
-            print("              export ANTHROPIC_API_KEY=sk-ant-...")
+            print("              Escríbela en ~/.config/aquiles/env, una línea:")
+            print("                ANTHROPIC_API_KEY=sk-ant-api03-...")
         if cfg["owner"].get("name") == cfg["assistant"].get("name"):
             print(f"  ! owner.name y assistant.name son ambos "
                   f"'{cfg['owner'].get('name')}'. En owner.name va TU nombre, "
