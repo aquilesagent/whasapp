@@ -107,6 +107,7 @@ En vuestra conversación, Aquiles tiene seis herramientas:
 | `agendar_reunion` | Apuntar una reunión |
 | `listar_reuniones` | Consultar la agenda |
 | `web_search` | Buscar en internet (`assistant.web_search = true`) |
+| `generar_imagen` | Dibujar algo y mandártelo al chat (solo si hay clave de OpenAI) |
 
 Así que le puedes escribir cosas como:
 
@@ -140,13 +141,46 @@ Pídeselo y ya está.
 
 ## Imágenes
 
-**No puede, y no es cuestión de activar nada.** Claude no genera imágenes, así
-que haría falta conectar otro proveedor (OpenAI, Stability, Replicate…) con su
-propia cuenta y su propia clave, facturada aparte.
+Pídeselas por WhatsApp y te las manda al chat:
 
-Si lo quieres, es media hora de trabajo: una herramienta nueva que llame a ese
-proveedor, guarde el resultado y lo mande con `send_file`. Pero decide primero
-qué proveedor, porque la calidad y el precio varían mucho.
+> Hazme una imagen de un café en la playa al atardecer, horizontal
+
+Esto **no lo hace Claude**: Claude no genera imágenes. Sale de OpenAI, con su
+propia cuenta y su propia clave, y se factura aparte de la de Anthropic. Es la
+única pieza de Aquiles que no depende de Claude.
+
+**Hace falta saldo en la cuenta de OpenAI.** No basta con crear la clave: una
+cuenta nueva empieza a cero y la primera petición se rechaza con
+`insufficient_quota`. Se carga el crédito en
+[platform.openai.com/settings/organization/billing](https://platform.openai.com/settings/organization/billing)
+—el mínimo son unos 5 dólares y cada imagen cuesta céntimos—. **No sirve la
+suscripción a ChatGPT Plus: es otra cosa.** Si falta el saldo, Aquiles lo dice
+con esas palabras en vez de soltar el error en inglés.
+
+Para activarlo, copia la clave de https://platform.openai.com/api-keys y:
+
+```bash
+make activar
+```
+
+Reconoce que es de OpenAI por el prefijo (`sk-proj-`), la guarda junto a la de
+Anthropic sin borrarla, e instala el paquete. Para comprobarlo:
+
+```bash
+make responder-check     # la línea "Imágenes:"
+```
+
+Si no hay clave, la herramienta **ni se le ofrece al modelo**: Aquiles dice que
+no puede en vez de prometerlo y fallar a mitad de conversación. Lo que no puede
+saber de antemano es si la cuenta tiene saldo; eso solo se ve al primer intento.
+
+Tres formas: `cuadrada`, `horizontal` y `vertical`. Las imágenes quedan en
+`state/imagenes/`.
+
+**Solo tú puedes pedirlas.** Al agente que atiende a terceros no se le ofrece
+la herramienta, porque cada imagen se factura y un desconocido pidiéndolas en
+bucle es una factura. Para apagarlas del todo aun teniendo clave:
+`[assistant] images = false`.
 
 ## Notas de voz
 

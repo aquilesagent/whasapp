@@ -867,3 +867,40 @@ def test_saving_one_key_does_not_erase_the_other(tmp_path):
         k, _, v = linea.partition("=")
         monkeyless[k] = v
     assert monkeyless["ANTHROPIC_API_KEY"] == "sk-ant-UNO"
+
+
+def _falla_con(monkeypatch, mensaje):
+    class Falso:
+        class images:
+            @staticmethod
+            def generate(**kw):
+                raise RuntimeError(mensaje)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-x")
+    monkeypatch.setattr(imagen, "_cliente", lambda: Falso())
+    with pytest.raises(imagen.ImagenNoDisponible) as e:
+        imagen.generar("un gato")
+    return str(e.value)
+
+
+def test_no_credit_is_explained_not_dumped(monkeypatch):
+    """Es el fallo más probable: la cuenta de OpenAI recién creada no tiene
+    saldo. Sin traducir, al chat llega un volcado en inglés con códigos HTTP
+    y el dueño no sabe qué le falta."""
+    salida = _falla_con(monkeypatch, "Error code: 429 - insufficient_quota: "
+                                     "You exceeded your current quota")
+    assert "saldo" in salida
+    assert "billing" in salida
+    assert "insufficient_quota" not in salida
+
+
+def test_a_bad_key_is_told_apart_from_no_credit(monkeypatch):
+    salida = _falla_con(monkeypatch, "Error code: 401 - invalid_api_key")
+    assert "make activar" in salida
+    assert "saldo" not in salida
+
+
+def test_an_unknown_failure_is_still_reported(monkeypatch):
+    """Traducir los casos conocidos no debe tragarse los demás."""
+    salida = _falla_con(monkeypatch, "connection reset by peer")
+    assert "connection reset by peer" in salida

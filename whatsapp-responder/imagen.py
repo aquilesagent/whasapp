@@ -48,6 +48,40 @@ def _sin_claves(texto: str) -> str:
     return re.sub(r"\bsk-[A-Za-z0-9_\-]{6,}", "sk-***", texto)
 
 
+# Lo que devuelve el proveedor cuando el problema no es el dibujo sino la
+# cuenta. Sin traducir, al chat llega un volcado en inglés con códigos HTTP y
+# el dueño no sabe qué hacer; con esto sabe exactamente qué le falta.
+_CAUSAS = (
+    (("insufficient_quota", "exceeded your current quota",
+      "billing_hard_limit_reached", "billing hard limit"),
+     "la cuenta de OpenAI no tiene saldo. Hay que cargarle crédito en "
+     "platform.openai.com/settings/organization/billing — el mínimo son unos "
+     "5 dólares y cada imagen cuesta céntimos. No tiene nada que ver con la "
+     "suscripción a ChatGPT ni con la clave de Anthropic."),
+    (("invalid_api_key", "incorrect api key", "401"),
+     "la clave de OpenAI no vale. Vuelve a copiarla de "
+     "platform.openai.com/api-keys y ejecuta 'make activar'."),
+    (("rate_limit", "429"),
+     "OpenAI está limitando las peticiones ahora mismo. Inténtalo en un "
+     "minuto."),
+    (("must be verified", "organization must be verified"),
+     "OpenAI pide verificar la organización antes de dejar generar imágenes. "
+     "Se hace en platform.openai.com/settings/organization/general."),
+    (("moderation", "safety system", "content_policy"),
+     "OpenAI ha rechazado esa descripción por su política de contenido. "
+     "Pídela de otra forma."),
+)
+
+
+def _explicar(error: str) -> str:
+    """Traduce el fallo del proveedor a algo accionable, si se reconoce."""
+    bajo = error.lower()
+    for pistas, explicacion in _CAUSAS:
+        if any(p in bajo for p in pistas):
+            return explicacion
+    return f"el proveedor de imágenes falló: {_sin_claves(error)}"
+
+
 def disponible() -> bool:
     if not os.environ.get("OPENAI_API_KEY"):
         return False
@@ -89,8 +123,7 @@ def generar(descripcion: str, forma: str = "cuadrada",
             n=1,
         )
     except Exception as e:  # la red y la API fallan de muchas formas
-        raise ImagenNoDisponible(
-            f"El proveedor de imágenes falló: {_sin_claves(str(e))}") from e
+        raise ImagenNoDisponible(_explicar(str(e))) from e
 
     if not respuesta.data:
         raise ImagenNoDisponible("El proveedor no devolvió ninguna imagen")
