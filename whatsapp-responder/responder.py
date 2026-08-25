@@ -142,9 +142,22 @@ def looks_like_placeholder(key: str) -> bool:
 
 
 def is_owner(msg: wa.Message, owner_phone: str) -> bool:
-    """El dueño escribiendo desde su móvil. Se compara solo el número: WhatsApp
-    añade sufijos de dispositivo (:12) y servidores distintos según el caso."""
-    return msg.sender_phone == owner_phone
+    """El dueño escribiendo desde su móvil.
+
+    Se compara solo el número, porque WhatsApp añade sufijos de dispositivo
+    (`:12`) y usa servidores distintos según el caso.
+
+    Y si el remitente llega como LID —un identificador opaco que WhatsApp usa
+    cada vez más en lugar del número— hay que traducirlo antes de comparar. Sin
+    eso el dueño no se reconoce nunca: sus mensajes llegan como `67495…@lid`,
+    que no se parece en nada a su número, y acaba recibiendo el saludo de
+    desconocidos en su propia conversación.
+    """
+    if msg.sender_phone == owner_phone:
+        return True
+    if msg.is_lid:
+        return wa.phone_for_lid(msg.sender) == owner_phone
+    return False
 
 
 def describe_incoming(msg: wa.Message, cfg: dict) -> str:
@@ -238,7 +251,9 @@ def attend_stranger(msg: wa.Message, cfg: dict, state: State,
         log.info("  -> primer contacto, saludo enviado")
 
         if greeting.get("notify_owner", True):
-            quien = msg.sender_phone or msg.chat_jid
+            # Un LID crudo no le dice nada a nadie; se traduce si se puede.
+            quien = (wa.phone_for_lid(msg.sender) if msg.is_lid else None) \
+                or msg.sender_phone or msg.chat_jid
             dijo = describe_incoming(msg, cfg)[:400]
             wa.send_message(
                 owner_phone,

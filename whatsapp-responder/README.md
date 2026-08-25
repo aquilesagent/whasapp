@@ -170,7 +170,7 @@ historial ya sincronizado.
 ## Pruebas
 
 ```bash
-uv run pytest -q          # 29 pruebas
+uv run pytest -q          # 44 pruebas
 uv run responder.py --once   # procesa lo pendiente y sale
 ```
 
@@ -182,7 +182,13 @@ Por orden de probabilidad:
 Compruébalo con `make doctor` — te dice si está en ejecución. Arráncalo con
 `make responder` y déjalo en su terminal.
 
-**2. `owner.phone` tiene el número equivocado.** Es el error más fácil: ahí
+**2. Te contesta el saludo de desconocidos a TI.** Tu remitente llega como
+LID (un identificador opaco tipo `67495578882103@lid`) en vez de como número.
+El respondedor lo traduce con el mapeo de whatsmeow, pero ese mapeo se llena
+al sincronizar: si el bridge acaba de vincularse, puede que aún no esté. Deja
+el bridge corriendo un rato y reinténtalo.
+
+**3. `owner.phone` tiene el número equivocado.** Es el error más fácil: ahí
 va **tu** número, no el de Aquiles. Míralos uno al lado del otro:
 
 ```bash
@@ -193,7 +199,7 @@ Si «Asistente» y «Dueño» muestran el mismo número, ese es el problema. El
 respondedor se niega a arrancar en ese caso, pero si ya estaba corriendo con
 la config vieja, reinícialo.
 
-**3. Escribiste antes de arrancarlo.** La marca de agua se fija en el mensaje
+**4. Escribiste antes de arrancarlo.** La marca de agua se fija en el mensaje
 más reciente al arrancar, así que lo anterior queda por debajo y se ignora.
 Para reprocesar los últimos minutos:
 
@@ -201,12 +207,12 @@ Para reprocesar los últimos minutos:
 uv run responder.py --replay-minutes 30
 ```
 
-**4. Mira lo que dice.** Desde que llega un mensaje, el log cuenta la decisión
+**5. Mira lo que dice.** Desde que llega un mensaje, el log cuenta la decisión
 tomada — dueño, tercero, grupo ignorado, tope horario. Si no aparece ninguna
 línea `Entrante de ...` cuando escribes, el problema está antes: o el bridge
 no está sincronizando, o el respondedor no está vivo.
 
-**5. Falta `ANTHROPIC_API_KEY`.** Sin clave no hay modelo, y por tanto no hay
+**6. Falta `ANTHROPIC_API_KEY`.** Sin clave no hay modelo, y por tanto no hay
 respuesta ni para ti ni para los terceros. El respondedor lo grita al arrancar
 y desactiva solo el agente público, para que a los desconocidos les llegue el
 saludo en vez de un error repetido.
@@ -264,7 +270,7 @@ funcionando y tiene prioridad sobre el fichero. Y si escribes `export` dentro
 del fichero también se acepta — aunque systemd no lo entiende, así que para
 los servicios déjalo sin `export`.
 
-**6. Un tercero solo recibió el saludo y nada más.** Comprueba
+**7. Un tercero solo recibió el saludo y nada más.** Comprueba
 `[public].enabled = true`. Con `false`, tras el saludo se calla.
 
 ## Límites de hoy

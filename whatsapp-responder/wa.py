@@ -21,6 +21,7 @@ MESSAGES_DB = os.path.join(BASE_DIR, "..", "whatsapp-bridge", "store", "messages
 API_BASE = os.environ.get("WHATSAPP_API_BASE_URL", "http://localhost:8080/api")
 
 GROUP_SUFFIX = "@g.us"
+LID_SUFFIX = "@lid"
 
 
 @dataclass(frozen=True)
@@ -38,8 +39,17 @@ class Message:
 
     @property
     def sender_phone(self) -> str:
-        """Numero del remitente, sin sufijo de servidor ni sufijo de dispositivo."""
+        """Numero del remitente, sin sufijo de servidor ni sufijo de dispositivo.
+
+        Ojo: si el remitente viene como LID, esto devuelve el LID, no un
+        numero. Usa phone_for_lid() para traducirlo.
+        """
         return self.sender.split("@", 1)[0].split(":", 1)[0]
+
+    @property
+    def is_lid(self) -> bool:
+        """El remitente viene identificado por LID en vez de por numero."""
+        return self.sender.endswith(LID_SUFFIX)
 
 
 class BridgeUnavailable(RuntimeError):
@@ -229,6 +239,31 @@ def linked_number() -> str | None:
     try:
         conn = sqlite3.connect(f"file:{SESSION_DB}?mode=ro", uri=True, timeout=5)
         row = conn.execute("SELECT jid FROM whatsmeow_device LIMIT 1").fetchone()
+        conn.close()
+    except sqlite3.Error:
+        return None
+    if not row or not row[0]:
+        return None
+    return str(row[0]).split("@", 1)[0].split(":", 1)[0]
+
+
+def phone_for_lid(lid: str) -> str | None:
+    """Traduce un LID al numero de telefono, con el mapeo de whatsmeow.
+
+    WhatsApp identifica cada vez a mas remitentes por LID (un identificador
+    opaco) en vez de por numero. Sin traducirlo, comparar el remitente con el
+    numero del dueño falla siempre y el dueño acaba tratado como un
+    desconocido.
+    """
+    if not lid or not os.path.exists(SESSION_DB):
+        return None
+    bare = lid.split("@", 1)[0].split(":", 1)[0]
+    try:
+        conn = sqlite3.connect(f"file:{SESSION_DB}?mode=ro", uri=True, timeout=5)
+        row = conn.execute(
+            "SELECT pn FROM whatsmeow_lid_map WHERE lid = ? OR lid = ?",
+            (lid, f"{bare}@lid"),
+        ).fetchone()
         conn.close()
     except sqlite3.Error:
         return None

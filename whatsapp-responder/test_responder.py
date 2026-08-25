@@ -436,3 +436,85 @@ def test_a_missing_file_is_not_an_error(tmp_path, monkeypatch):
     monkeypatch.setattr(responder, "ENV_FILES", (str(tmp_path / "no-existe"),))
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert responder.load_env_file() is None
+
+
+# --------------------------------------------------------------------------
+# El dueño identificado por LID
+# --------------------------------------------------------------------------
+
+OWNER_LID = "67495578882103"
+
+
+def lid_msg(lid: str, content: str) -> wa.Message:
+    """Como llega de verdad un mensaje cuando WhatsApp usa LID: el remitente
+    es un identificador opaco que no se parece al número."""
+    return wa.Message(id=f"lid-{len(content)}", chat_jid=f"{lid}@lid",
+                      sender=f"{lid}@lid", content=content,
+                      timestamp=datetime.now(), media_type=None)
+
+
+def test_owner_is_recognised_through_their_lid(monkeypatch):
+    """El caso real: el dueño escribió y recibió el saludo de desconocidos en
+    su propio chat, porque su remitente llegaba como LID."""
+    monkeypatch.setattr(wa, "phone_for_lid",
+                        lambda s: OWNER if s.startswith(OWNER_LID) else None)
+    assert responder.is_owner(lid_msg(OWNER_LID, "Hola"), OWNER)
+
+
+def test_a_stranger_lid_is_still_a_stranger(monkeypatch):
+    monkeypatch.setattr(wa, "phone_for_lid", lambda s: "34600999888")
+    assert not responder.is_owner(lid_msg("99999999999999", "Hola"), OWNER)
+
+
+def test_an_unmapped_lid_is_not_the_owner(monkeypatch):
+    """Sin mapeo conocido no se puede afirmar que sea el dueño; tratarlo como
+    tal daría acceso a sus chats a quien no toca."""
+    monkeypatch.setattr(wa, "phone_for_lid", lambda s: None)
+    assert not responder.is_owner(lid_msg(OWNER_LID, "Hola"), OWNER)
+
+
+def test_the_owners_lid_reaches_their_own_agent(state, sent, monkeypatch):
+    monkeypatch.setattr(wa, "phone_for_lid",
+                        lambda s: OWNER if s.startswith(OWNER_LID) else None)
+    visto = []
+    monkeypatch.setattr(responder.agent, "reply",
+                        lambda chat, text, **k: visto.append(text) or "A la orden.")
+    responder.handle(lid_msg(OWNER_LID, "¿qué reuniones tengo?"),
+                     CONFIG, state, OWNER)
+    assert visto == ["¿qué reuniones tengo?"], \
+        "el dueño por LID debe ir a su agente, no al saludo"
+    assert sent[-1][1] == "A la orden."
+
+
+def test_a_plain_number_still_works_without_touching_the_lid_map(monkeypatch):
+    """La ruta normal no debe depender de la base de sesión del bridge."""
+    def boom(_):
+        raise AssertionError("no hace falta consultar el mapa de LIDs")
+    monkeypatch.setattr(wa, "phone_for_lid", boom)
+    assert responder.is_owner(msg(OWNER, "hola"), OWNER)
+
+
+def test_the_notification_shows_a_number_not_a_lid(state, sent, no_llm, monkeypatch):
+    """«Le ha escrito 67495578882103» no le sirve de nada al dueño."""
+    monkeypatch.setattr(wa, "phone_for_lid", lambda s: "34600111222")
+    responder.handle(lid_msg("99999999999999", "Hola"), CONFIG, state, OWNER)
+    aviso = next(t for to, t in sent if to == OWNER)
+    assert "34600111222" in aviso
+    assert "99999999999999" not in aviso
+
+
+def test_phone_for_lid_reads_whatsmeows_table(tmp_path, monkeypatch):
+    """Contra el esquema real de whatsmeow, no contra uno inventado."""
+    db = tmp_path / "whatsapp.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE whatsmeow_lid_map (lid TEXT PRIMARY KEY, "
+                 "pn TEXT UNIQUE NOT NULL)")
+    conn.execute("INSERT INTO whatsmeow_lid_map VALUES (?, ?)",
+                 ("67495578882103@lid", "584241983140@s.whatsapp.net"))
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(wa, "SESSION_DB", str(db))
+
+    assert wa.phone_for_lid("67495578882103@lid") == "584241983140"
+    assert wa.phone_for_lid("67495578882103:3@lid") == "584241983140"
+    assert wa.phone_for_lid("11111111111111@lid") is None
