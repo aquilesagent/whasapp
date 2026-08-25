@@ -1,4 +1,4 @@
-.PHONY: setup activar voz bridge responder responder-check build check doctor clean
+.PHONY: setup activar voz audio bridge responder responder-check build check doctor clean
 
 setup:   ## Instala dependencias y compila todo
 	./scripts/setup.sh
@@ -11,6 +11,9 @@ activar:         ## Guarda la clave de la API y deja el respondedor listo
 
 voz:             ## Instala escucha y habla (sin sudo) y descarga una voz
 	./scripts/voz.sh
+
+audio:           ## Diagnostica por que una nota de voz no se pudo escuchar
+	@./scripts/probar-audio.sh || true
 
 responder:       ## Arranca el respondedor automatico (Aquiles)
 	cd whatsapp-responder && uv run responder.py
