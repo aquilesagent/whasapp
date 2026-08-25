@@ -201,6 +201,33 @@ def test_config_rejects_an_empty_greeting(tmp_path):
         responder.load_config(str(p))
 
 
+def test_config_rejects_the_assistants_own_number(tmp_path, monkeypatch):
+    """Confundir el número del asistente con el propio deja al dueño mudo:
+    sus mensajes llegan desde SU número, nunca desde el del bridge, así que
+    la rama del dueño no se activaría jamás."""
+    monkeypatch.setattr(wa, "linked_number", lambda: "584221983140")
+    p = tmp_path / "config.toml"
+    p.write_text('[owner]\nphone = "584221983140"\n[greeting]\ntext = "hola"\n')
+    with pytest.raises(SystemExit) as e:
+        responder.load_config(str(p))
+    assert "ASISTENTE" in str(e.value)
+
+
+def test_config_accepts_a_different_owner_number(tmp_path, monkeypatch):
+    monkeypatch.setattr(wa, "linked_number", lambda: "584221983140")
+    p = tmp_path / "config.toml"
+    p.write_text('[owner]\nphone = "34600111222"\n[greeting]\ntext = "hola"\n')
+    assert responder.load_config(str(p))["owner"]["phone"] == "34600111222"
+
+
+def test_config_check_survives_an_unlinked_bridge(tmp_path, monkeypatch):
+    """Sin sesión no hay número vinculado; validar no debe romperse por eso."""
+    monkeypatch.setattr(wa, "linked_number", lambda: None)
+    p = tmp_path / "config.toml"
+    p.write_text('[owner]\nphone = "34600111222"\n[greeting]\ntext = "hola"\n')
+    assert responder.load_config(str(p))
+
+
 def test_example_config_is_loadable(tmp_path):
     """El ejemplo que se copia debe validar tal cual, salvo el número."""
     src = os.path.join(os.path.dirname(os.path.abspath(__file__)),

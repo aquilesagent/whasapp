@@ -2,8 +2,14 @@
 # config.toml está en .gitignore: contiene tu número y no debe subirse.
 
 [owner]
-# Tu número, con prefijo de país, sin "+" ni espacios. Es el ÚNICO número que
-# habla con el modelo; todos los demás reciben el texto fijo de [greeting].
+# TU número — el del teléfono desde el que le escribes a Aquiles.
+# Con prefijo de país, sin "+" ni espacios.
+#
+# OJO: NO es el número al que está vinculado el bridge (ese es el de Aquiles).
+# Son dos teléfonos distintos. Si pones aquí el del asistente, tus mensajes
+# nunca se reconocerán como tuyos y Aquiles no te contestará. El respondedor
+# lo detecta y se niega a arrancar, pero mejor no llegar ahí.
+# Para ver cuál es cuál:  uv run responder.py --check
 phone = "584120000000"
 # Cómo debe llamarte el asistente.
 name = "Sr Marcos"

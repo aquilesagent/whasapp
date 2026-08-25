@@ -57,6 +57,20 @@ def load_config(path: str = CONFIG_PATH) -> dict:
         )
     if not cfg.get("greeting", {}).get("text", "").strip():
         raise SystemExit("config.toml: greeting.text no puede estar vacío.")
+
+    # El error mas facil de cometer: poner en owner.phone el numero del
+    # asistente en vez del propio. Con esa config el dueño nunca se reconoce
+    # (sus mensajes llegan desde SU numero, no desde el del bridge), asi que
+    # el asistente le contesta el saludo de desconocido o, pasado el
+    # enfriamiento, se queda callado. Se detecta y se para aqui.
+    linked = wa.linked_number()
+    if linked and linked == phone:
+        raise SystemExit(
+            f"config.toml: owner.phone es {phone}, que es el número al que está\n"
+            f"vinculado el bridge — o sea, el número DEL ASISTENTE.\n\n"
+            f"owner.phone tiene que ser TU número, el del teléfono desde el que\n"
+            f"le escribes. Son dos números distintos."
+        )
     return cfg
 
 
@@ -153,22 +167,28 @@ def greet_stranger(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -
 
 def handle(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -> None:
     limits = cfg.get("limits", {})
+    log.info("Entrante de %s (chat %s): %s",
+             msg.sender_phone or "?", msg.chat_jid, (msg.content or "")[:80])
 
     if msg.is_group and not limits.get("reply_in_groups", False):
+        log.info("  -> es un grupo, lo ignoro (limits.reply_in_groups = false)")
         return
 
     cap = limits.get("max_replies_per_contact_per_hour", 6)
     if state.replies_last_hour(msg.chat_jid) >= cap:
-        log.warning("Tope horario alcanzado para %s, no respondo", msg.chat_jid)
+        log.warning("  -> tope horario alcanzado (%d/h), no respondo", cap)
         return
 
     if is_owner(msg, owner_phone):
+        log.info("  -> es el dueño, va al modelo")
         reply_to_owner(msg, cfg, state)
     else:
+        log.info("  -> es un tercero (%s != %s), saludo fijo",
+                 msg.sender_phone, owner_phone)
         greet_stranger(msg, cfg, state, owner_phone)
 
 
-def run(cfg: dict, once: bool = False) -> int:
+def run(cfg: dict, once: bool = False, replay_minutes: int | None = None) -> int:
     owner_phone = str(cfg["owner"]["phone"]).strip()
     state = State()
     agent.configure(
@@ -178,7 +198,13 @@ def run(cfg: dict, once: bool = False) -> int:
     )
 
     watermark = state.get_watermark()
-    if watermark is None:
+    if replay_minutes:
+        from datetime import timedelta
+        watermark = datetime.now() - timedelta(minutes=replay_minutes)
+        state.set_watermark(watermark)
+        log.info("Reproduciendo los últimos %d minutos desde %s",
+                 replay_minutes, watermark)
+    elif watermark is None:
         # Primer arranque: solo desde ahora. Responder al historial entero
         # sería enviar cientos de saludos a gente que escribió hace meses.
         watermark = wa.latest_timestamp()
@@ -225,6 +251,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Respondedor automático de WhatsApp")
     ap.add_argument("--once", action="store_true",
                     help="Procesa lo pendiente y sale (para pruebas)")
+    ap.add_argument("--replay-minutes", type=int, metavar="N",
+                    help="Retrocede la marca de agua N minutos y reprocesa "
+                         "esos mensajes (para probar sin escribir de nuevo)")
     ap.add_argument("--check", action="store_true",
                     help="Valida la configuración y el entorno, sin responder nada")
     args = ap.parse_args(argv)
@@ -241,8 +270,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         print("Configuración válida.")
+        linked = wa.linked_number()
+        if linked:
+            print(f"  Asistente:  {linked}  (número vinculado al bridge)")
+        else:
+            print("  Asistente:  SIN VINCULAR — ejecuta 'make bridge' primero")
         print(f"  Dueño:      {cfg['owner']['phone']} ({cfg['owner'].get('name')})")
-        print(f"  Asistente:  {cfg['assistant'].get('name')} / {cfg['assistant'].get('model')}")
+        print(f"  Modelo:     {cfg['assistant'].get('name')} / {cfg['assistant'].get('model')}")
         print(f"  Saludo:     {cfg['greeting']['text'][:60]}...")
         print(f"  API key:    {'presente' if os.environ.get('ANTHROPIC_API_KEY') else 'AUSENTE (exporta ANTHROPIC_API_KEY)'}")
         print("  Voz:")
@@ -256,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
             "pero la conversación contigo fallará."
         )
 
-    return run(cfg)
+    return run(cfg, once=args.once, replay_minutes=args.replay_minutes)
 
 
 if __name__ == "__main__":

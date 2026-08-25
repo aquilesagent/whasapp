@@ -212,3 +212,26 @@ def send_audio(recipient: str, ogg_path: str) -> tuple[bool, str]:
     except ValueError:
         return False, f"Respuesta no válida: {resp.text[:200]}"
     return bool(body.get("success")), str(body.get("message", ""))
+
+
+SESSION_DB = os.path.join(BASE_DIR, "..", "whatsapp-bridge", "store", "whatsapp.db")
+
+
+def linked_number() -> str | None:
+    """Numero al que esta vinculado el bridge, o None si no hay sesion.
+
+    Es el numero DEL ASISTENTE. Nunca puede ser el del dueño: los mensajes
+    propios no llegan como entrantes, asi que si alguien pone este numero en
+    owner.phone, la conversacion con el dueño no se activa jamas.
+    """
+    if not os.path.exists(SESSION_DB):
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{SESSION_DB}?mode=ro", uri=True, timeout=5)
+        row = conn.execute("SELECT jid FROM whatsmeow_device LIMIT 1").fetchone()
+        conn.close()
+    except sqlite3.Error:
+        return None
+    if not row or not row[0]:
+        return None
+    return str(row[0]).split("@", 1)[0].split(":", 1)[0]
