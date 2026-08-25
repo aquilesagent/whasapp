@@ -41,12 +41,29 @@ El bridge tiene que estar corriendo para que el MCP funcione.
 
 | | |
 | --- | --- |
-| Go | 1.24+ (con CGO — `go-sqlite3` es una extensión en C) |
+| Go | **1.26+** (lo exige whatsmeow). Con una versión anterior, Go se descarga la cadena correcta solo si tiene red. |
+| Compilador de C | `gcc`/`cc` — `go-sqlite3` es una extensión en C y se compila con CGO |
 | Python | 3.11+ |
 | [uv](https://docs.astral.sh/uv/) | gestor de paquetes de Python |
 | ffmpeg | opcional, solo para `send_audio_message` con `.mp3`/`.wav` |
 
-En Windows hace falta un compilador de C (MSYS2) y `CGO_ENABLED=1`.
+`make setup` comprueba las cuatro y te dice qué instalar si falta algo.
+
+### Windows
+
+Usa **WSL** y sigue las instrucciones de Linux; es con diferencia lo más
+sencillo. En un WSL recién instalado te faltarán el compilador y las
+herramientas:
+
+```bash
+sudo apt update && sudo apt install -y build-essential git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -sSL https://go.dev/dl/go1.26.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+echo 'export PATH=$PATH:/usr/local/go/bin:$HOME/.local/bin' >> ~/.bashrc && source ~/.bashrc
+```
+
+Si prefieres Windows nativo, necesitas MSYS2 para el compilador de C y
+`CGO_ENABLED=1`.
 
 ## Instalación
 
@@ -55,6 +72,10 @@ git clone https://github.com/aquilesagent/whasapp.git
 cd whasapp
 make setup          # comprueba requisitos, compila el bridge, instala deps
 ```
+
+Todo lo que viene después se ejecuta **dentro de ese directorio**. Si
+`make` responde `No targets specified`, es que no estás en él o el clonado
+no llegó a hacerse.
 
 ### Vincular el móvil
 
@@ -213,7 +234,9 @@ Variables que entiende el bridge:
 | El QR no aparece | Borra `whatsapp-bridge/store/` y vuelve a arrancar el bridge. |
 | `no such table: messages` | El bridge no ha corrido nunca o no terminó de sincronizar. |
 | Claude dice que no puede enviar | El bridge no está corriendo. `make bridge`. |
-| `undefined: ... sqlite3` al compilar | Falta CGO o un compilador de C. Exporta `CGO_ENABLED=1`. |
+| `undefined: ... sqlite3` al compilar | Falta el compilador de C: `sudo apt install build-essential`. |
+| `make: No targets specified` | No estás dentro del directorio `whasapp`, o no lo has clonado. |
+| `requires go >= 1.26.0` | Go demasiado viejo y sin red para autodescargarse. Instálalo desde [go.dev/dl](https://go.dev/dl/). |
 | Dejó de conectar tras semanas | Sesión caducada: borra `whatsapp-bridge/store/` y reescanea. |
 
 Ante cualquier duda, `make doctor` revisa requisitos, build, sesión vinculada,
