@@ -1,0 +1,16 @@
+# Sesión de WhatsApp y base de datos de mensajes (datos personales — nunca commitear)
+whatsapp-bridge/store/
+whatsapp-bridge/whatsapp-bridge
+whatsapp-bridge/bin/
+
+# Media descargada
+store/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Sistema
+.DS_Store
