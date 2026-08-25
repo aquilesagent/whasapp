@@ -1,4 +1,4 @@
-.PHONY: setup activar voz audio olvidar bridge responder responder-check build check doctor clean
+.PHONY: setup activar voz voces voz-real audio olvidar bridge responder responder-check build check doctor clean
 
 setup:   ## Instala dependencias y compila todo
 	./scripts/setup.sh
@@ -11,6 +11,12 @@ activar:         ## Guarda la clave de la API y deja el respondedor listo
 
 voz:             ## Instala escucha y habla (sin sudo) y descarga una voz
 	./scripts/voz.sh
+
+voces:           ## Lista las voces realistas disponibles (ElevenLabs)
+	@cd whatsapp-responder && uv run python voces.py listar
+
+voz-real:        ## Pone una voz realista y la prueba (make voz-real VOZ=2)
+	@cd whatsapp-responder && uv run python voces.py elegir $(VOZ)
 
 audio:           ## Diagnostica por que una nota de voz no se pudo escuchar
 	@./scripts/probar-audio.sh || true

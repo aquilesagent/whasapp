@@ -18,6 +18,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import imagen  # noqa: E402
 import responder  # noqa: E402
+import voces  # noqa: E402
+import voice  # noqa: E402
 import wa  # noqa: E402
 from state import State  # noqa: E402
 
@@ -904,3 +906,149 @@ def test_an_unknown_failure_is_still_reported(monkeypatch):
     """Traducir los casos conocidos no debe tragarse los demás."""
     salida = _falla_con(monkeypatch, "connection reset by peer")
     assert "connection reset by peer" in salida
+
+
+# --------------------------------------------------------------------------
+# La voz: elegir una realista y no quedarse mudo si falla
+# --------------------------------------------------------------------------
+
+CATALOGO = [
+    {"name": "Ana de Madrid", "accent": "es-castilian", "descripcion": "",
+     "propia": False, "voice_id": "a1", "public_owner_id": "o1"},
+    {"name": "Carlos", "accent": "es-latin-american",
+     "descripcion": "voz neutra latinoamericana", "propia": False,
+     "voice_id": "c1", "public_owner_id": "o2"},
+    {"name": "Jorge", "accent": "es-mexican", "descripcion": "",
+     "propia": False, "voice_id": "j1", "public_owner_id": "o3"},
+]
+
+
+def test_a_neutral_latin_voice_wins_over_a_peninsular_one():
+    """'Neutro' no es un acento real sino la ausencia de marcas regionales.
+    Una voz de España es exactamente lo contrario de lo que se pidió."""
+    orden = [v["name"] for v in voces._neutra_primero(CATALOGO)]
+    assert orden[0] == "Carlos"
+    assert orden[-1] == "Ana de Madrid"
+
+
+def test_a_voice_can_be_chosen_by_number_or_by_name():
+    lista = voces._neutra_primero(CATALOGO)
+    assert voces._escoger(lista, "1")["name"] == "Carlos"
+    assert voces._escoger(lista, "jorge")["name"] == "Jorge"
+    assert voces._escoger(lista, None)["name"] == "Carlos"
+
+
+def test_a_number_out_of_range_says_so_instead_of_crashing():
+    lista = voces._neutra_primero(CATALOGO)
+    with pytest.raises(voces.SinClave):
+        voces._escoger(lista, "99")
+    with pytest.raises(voces.SinClave):
+        voces._escoger(lista, "no existe tal voz")
+
+
+def test_choosing_a_voice_keeps_the_config_comments(tmp_path, monkeypatch):
+    """config.toml explica cada opción en comentarios. Volcarlo desde un
+    diccionario los borraría y dejaría al dueño sin la documentación que
+    tiene delante al configurarlo."""
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[voice]\n"
+        "# esto explica lo de abajo\n"
+        "reply_with_voice = false\n"
+        'piper_voice = ""\n',
+        encoding="utf-8")
+    monkeypatch.setattr(voces, "CONFIG", str(cfg))
+
+    voces._guardar_en_config("VOZ123")
+    texto = cfg.read_text(encoding="utf-8")
+
+    assert 'elevenlabs_voice = "VOZ123"' in texto
+    assert "# esto explica lo de abajo" in texto
+    assert 'piper_voice = ""' in texto
+    # De nada sirve configurar la voz si sigue contestando en texto.
+    assert "reply_with_voice = true" in texto
+
+
+def test_choosing_a_voice_replaces_the_previous_one(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[voice]\nelevenlabs_voice = "VIEJA"\n'
+                   "reply_with_voice = true\n", encoding="utf-8")
+    monkeypatch.setattr(voces, "CONFIG", str(cfg))
+
+    voces._guardar_en_config("NUEVA")
+    texto = cfg.read_text(encoding="utf-8")
+    assert "VIEJA" not in texto
+    assert texto.count("elevenlabs_voice") == 1
+
+
+@pytest.fixture
+def voz_falsa(monkeypatch, tmp_path):
+    """Sustituye los tres motores y ffmpeg: aquí se prueba qué motor se
+    escoge, no si el audio suena."""
+    usados = []
+
+    def eleven(text, destino, voice_id, model_id=voice.ELEVEN_MODELO):
+        usados.append(("elevenlabs", voice_id))
+        open(destino, "wb").write(b"mp3")
+
+    def piper(text, wav, modelo):
+        usados.append(("piper", modelo))
+        open(wav, "wb").write(b"wav")
+
+    monkeypatch.setattr(voice, "ffmpeg_available", lambda: True)
+    monkeypatch.setattr(voice, "_elevenlabs_to_mp3", eleven)
+    monkeypatch.setattr(voice, "_piper_to_wav", piper)
+    monkeypatch.setattr(voice, "_piper_model_por_defecto", lambda: "modelo.onnx")
+    monkeypatch.setattr(voice, "_a_opus_ogg",
+                        lambda fuente, out: open(out, "wb").write(b"ogg"))
+    monkeypatch.setattr(voice, "elevenlabs_disponible", lambda: True)
+    return usados
+
+
+def test_the_realistic_voice_is_used_when_configured(voz_falsa, tmp_path):
+    voice.synthesize("hola", str(tmp_path / "o.ogg"), eleven_voice="VOZ123")
+    assert voz_falsa == [("elevenlabs", "VOZ123")]
+
+
+def test_the_local_voice_is_used_when_no_realistic_one_is_set(voz_falsa, tmp_path):
+    voice.synthesize("hola", str(tmp_path / "o.ogg"))
+    assert voz_falsa == [("piper", "modelo.onnx")]
+
+
+def test_a_failing_realistic_voice_falls_back_instead_of_going_mute(
+        voz_falsa, monkeypatch, tmp_path):
+    """Quedarse callado porque ElevenLabs se quedó sin créditos sería peor
+    que sonar algo peor: la voz local no depende de la red ni de una cuota."""
+    def sin_creditos(*a, **k):
+        raise voice.VoiceUnavailable("sin créditos este mes")
+
+    monkeypatch.setattr(voice, "_elevenlabs_to_mp3", sin_creditos)
+    salida = tmp_path / "o.ogg"
+    voice.synthesize("hola", str(salida), eleven_voice="VOZ123")
+
+    assert voz_falsa == [("piper", "modelo.onnx")]
+    assert salida.exists()
+
+
+def test_the_realistic_voice_is_skipped_without_a_key(voz_falsa, monkeypatch,
+                                                      tmp_path):
+    monkeypatch.setattr(voice, "elevenlabs_disponible", lambda: False)
+    voice.synthesize("hola", str(tmp_path / "o.ogg"), eleven_voice="VOZ123")
+    assert voz_falsa == [("piper", "modelo.onnx")]
+
+
+def test_the_elevenlabs_key_is_read_from_the_same_file(tmp_path, monkeypatch):
+    env = tmp_path / "env"
+    env.write_text("ELEVENLABS_API_KEY=sk_REAL\n", encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+
+    responder.load_env_file()
+    assert os.environ["ELEVENLABS_API_KEY"] == "sk_REAL"
+
+
+def test_running_out_of_credits_is_explained_in_plain_words():
+    assert "creditos" in voice._explicar_eleven(
+        "status 429: quota_exceeded").lower()
+    assert "clave" in voice._explicar_eleven("401 unauthorized").lower()

@@ -9,10 +9,11 @@
 # El portapapeles es la vía preferida: la clave no pasa por el historial de
 # bash ni por ninguna conversación.
 #
-# Acepta las dos claves que usa Aquiles y distingue cuál es por el prefijo: la
-# de Anthropic (sk-ant-...) es la que le hace hablar, y la de OpenAI
-# (sk-proj-...) solo hace falta para generar imágenes. Guardar una no borra la
-# otra.
+# Acepta las tres claves que usa Aquiles y distingue cuál es por el prefijo:
+#   sk-ant-...   Anthropic   — la que le hace hablar. Sin ella no hay asistente.
+#   sk-proj-...  OpenAI      — solo para generar imágenes.
+#   sk_...       ElevenLabs  — solo para la voz realista.
+# Guardar una no borra las otras.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,7 +48,7 @@ if [ -z "$CLAVE" ] && [ ! -t 0 ]; then
 fi
 
 if [ -z "$CLAVE" ]; then
-  CLAVE="$(leer_portapapeles | grep -oE 'sk-(ant|proj|svcacct)-[A-Za-z0-9_-]*' | head -1)"
+  CLAVE="$(leer_portapapeles | grep -oE 'sk-(ant|proj|svcacct)-[A-Za-z0-9_-]*|sk_[A-Za-z0-9]{20,}' | head -1)"
   ORIGEN="el portapapeles"
 fi
 
@@ -60,16 +61,18 @@ if [ -z "$CLAVE" ]; then
   echo "clave») y vuelve a ejecutar esto. O pásala directamente:"
   echo "    ./scripts/activar.sh sk-ant-api03-loquesea"
   echo
-  echo "Para que además genere imágenes, repite esto mismo con la clave de"
-  echo "OpenAI (https://platform.openai.com/api-keys). Es otra cuenta y otra"
-  echo "factura; guardar una no borra la otra."
+  echo "Repite esto mismo con las otras dos claves si las quieres:"
+  echo "  OpenAI     https://platform.openai.com/api-keys      (imágenes)"
+  echo "  ElevenLabs https://elevenlabs.io/app/settings/api-keys (voz realista)"
+  echo "Cada una es una cuenta aparte; guardar una no borra las otras."
   exit 1
 fi
 
 case "$CLAVE" in
   sk-ant-*)               VARIABLE="ANTHROPIC_API_KEY"; QUIEN="Anthropic (hablar)" ;;
   sk-proj-*|sk-svcacct-*) VARIABLE="OPENAI_API_KEY";    QUIEN="OpenAI (imágenes)" ;;
-  *) rojo "Eso no parece una clave: no empieza por 'sk-ant-' ni por 'sk-proj-'."
+  sk_*)                   VARIABLE="ELEVENLABS_API_KEY"; QUIEN="ElevenLabs (voz realista)" ;;
+  *) rojo "Eso no parece una clave: no empieza por 'sk-ant-', 'sk-proj-' ni 'sk_'."
      echo "Encontrado en $ORIGEN: ${CLAVE:0:12}..."
      exit 1 ;;
 esac
@@ -88,12 +91,23 @@ echo "  $VARIABLE = ${CLAVE:0:16}…${CLAVE: -4}   ${#CLAVE} caracteres"
 
 # El paquete de imágenes solo se instala cuando hay clave para usarlo: son
 # ~15 MB que no le hacen falta a quien no genere imágenes.
-if [ "$VARIABLE" = "OPENAI_API_KEY" ]; then
-  echo "==> Instalando el paquete de imágenes"
-  ( cd "$ROOT/whatsapp-responder" && uv sync --extra imagenes ) || {
+case "$VARIABLE" in
+  OPENAI_API_KEY)     EXTRA=imagenes ;;
+  ELEVENLABS_API_KEY) EXTRA=real ;;
+  *)                  EXTRA="" ;;
+esac
+if [ -n "$EXTRA" ]; then
+  echo "==> Instalando el paquete '$EXTRA'"
+  ( cd "$ROOT/whatsapp-responder" && uv sync --extra "$EXTRA" ) || {
     rojo "No se pudo instalar. Hazlo a mano:"
-    echo "    cd $ROOT/whatsapp-responder && uv sync --extra imagenes"
+    echo "    cd $ROOT/whatsapp-responder && uv sync --extra $EXTRA"
   }
+fi
+if [ "$VARIABLE" = "ELEVENLABS_API_KEY" ]; then
+  echo
+  echo "Elige la voz con la que quieres que hable:"
+  echo "    make voces        ver las disponibles"
+  echo "    make voz-real     poner la mejor voz neutra y probarla"
 fi
 
 # --- 3. La configuración del respondedor -----------------------------------

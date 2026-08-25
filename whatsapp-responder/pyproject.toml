@@ -22,6 +22,11 @@ voice = [
 imagenes = [
     "openai>=1.99",
 ]
+# La voz realista de ElevenLabs. Aparte porque tiene su propia clave y su
+# propio plan:  uv sync --extra real
+real = [
+    "elevenlabs>=2.0",
+]
 
 [dependency-groups]
 dev = [

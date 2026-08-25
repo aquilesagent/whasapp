@@ -196,9 +196,10 @@ Además del MCP (donde tú preguntas y Claude responde), el repo trae un
 El primer contacto de cada persona recibe tu saludo **literal**, sin pasar por
 ningún modelo.
 
-También transcribe las notas de voz que le manden, y puede responder en voz.
-Contigo además busca en internet y genera imágenes —esto último con una clave
-de OpenAI aparte, porque Claude no dibuja—.
+También transcribe las notas de voz que le manden, y puede responder en voz
+—con una voz local gratuita, o con una de ElevenLabs indistinguible de una
+persona—. Contigo además busca en internet y genera imágenes, esto último con
+una clave de OpenAI aparte porque Claude no dibuja.
 
 ```bash
 cd whatsapp-responder

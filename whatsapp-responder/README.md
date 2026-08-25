@@ -200,7 +200,7 @@ quedarse callado por no tener ffmpeg sería mucho peor que sonar robótico.
 make voz
 ```
 
-Instala todo, descarga una voz española y activa `reply_with_voice`. **No
+Instala todo, descarga una voz latina neutra y activa `reply_with_voice`. **No
 necesita `sudo`**, y eso es deliberado: `sudo apt install ffmpeg espeak-ng` es
 el camino obvio y es justo el que no sirve cuando esto lo maneja un agente,
 porque `sudo` exige una terminal interactiva. Todo lo necesario está en pip:
@@ -211,20 +211,56 @@ porque `sudo` exige una terminal interactiva. Todo lo necesario está en pip:
 | `piper-tts` | Sintetiza las respuestas, con voz neuronal |
 | `imageio-ffmpeg` | Trae su propio ffmpeg con libopus |
 
-Son unos 400 MB. Para elegir otra voz:
-
-```bash
-make voz VOZ=es_MX-claude-high     # hombre, México — la de mejor calidad
-make voz VOZ=es_ES-sharvard-medium # mujer, España
-make voz VOZ=es_ES-davefx-medium   # hombre, España (por defecto)
-```
+Son unos 400 MB.
 
 `ffmpeg` no es opcional para enviar voz: WhatsApp solo pinta la onda y el
 botón de reproducir si el audio es `.ogg` opus. Si tienes uno del sistema se
 usa ese; si no, el de pip.
 
-Si no hay piper, cae a `espeak-ng` cuando esté instalado — suena a robot de
-los noventa, pero sirve para probar.
+### Qué voz usa
+
+Hay tres motores, de más a menos realista. Se prueba el primero que esté
+configurado y **se cae al siguiente en cuanto uno falla**: que ElevenLabs se
+quede sin créditos no puede dejar mudo a Aquiles.
+
+| | Motor | Realismo | Coste | Clave |
+| --- | --- | --- | --- | --- |
+| 1 | ElevenLabs | indistinguible de una persona | 10.000 caracteres/mes gratis | `ELEVENLABS_API_KEY` |
+| 2 | piper | se nota que es sintética | gratis, sin límite | ninguna |
+| 3 | espeak-ng | robot de los noventa | gratis | ninguna |
+
+**Para la voz realista** —acento latino neutro, que es lo que más se parece a
+una persona por WhatsApp—:
+
+```bash
+make activar      # pega la clave de elevenlabs.io/app/settings/api-keys
+make voz-real     # elige la mejor voz neutra, la añade a tu cuenta y la prueba
+```
+
+`make voz-real` deja una muestra en `state/muestra-voz.ogg` para que la
+escuches antes de que la use con nadie. Si prefieres otra:
+
+```bash
+make voces                  # las lista con su número y su acento
+make voz-real VOZ=3
+make voz-real VOZ=Carlos
+```
+
+Las voces del catálogo público hay que añadirlas a la cuenta antes de poder
+usarlas; `voz-real` lo hace por ti. Sin ese paso, ElevenLabs responde
+`voice_not_found`.
+
+**Para la voz local** (gratis y sin límite, pero sintética):
+
+```bash
+make voz VOZ=es_MX-claude-high       # hombre, México — neutra, la mejor calidad
+make voz VOZ=es_MX-ald-medium        # hombre, México
+make voz VOZ=es_AR-daniela-high      # mujer, Argentina
+make voz VOZ=es_ES-davefx-medium     # hombre, España
+make voz VOZ=es_ES-sharvard-medium   # mujer, España
+```
+
+Cambiar de voz vuelve a descargar y deja `piper_voice` apuntando a la nueva.
 
 ## Cómo funciona por dentro
 

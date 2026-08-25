@@ -82,10 +82,10 @@ ENV_FILES = (
 )
 
 
-# Claves que se leen del fichero. La de Anthropic es la que mueve todo; la de
-# OpenAI solo hace falta para generar imagenes, y su ausencia no impide nada
-# mas.
-CLAVES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+# Claves que se leen del fichero. La de Anthropic es la que mueve todo; las
+# otras dos son opcionales y cada una habilita una sola cosa: OpenAI las
+# imagenes, ElevenLabs la voz realista. Sin ellas el resto sigue igual.
+CLAVES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY")
 
 
 def load_env_file() -> str | None:
@@ -215,7 +215,13 @@ def send_reply(msg: wa.Message, answer: str, cfg: dict, state: State) -> None:
         try:
             os.makedirs(AUDIO_OUT_DIR, exist_ok=True)
             out = os.path.join(AUDIO_OUT_DIR, f"{msg.id}.ogg")
-            voice.synthesize(answer, out, piper_voice=voice_cfg.get("piper_voice"))
+            voice.synthesize(
+                answer, out,
+                piper_voice=voice_cfg.get("piper_voice"),
+                eleven_voice=voice_cfg.get("elevenlabs_voice") or None,
+                eleven_model=voice_cfg.get("elevenlabs_model",
+                                           voice.ELEVEN_MODELO),
+            )
             ok, detail = wa.send_audio(msg.chat_jid, out)
             if ok:
                 state.record_reply(msg.chat_jid)
@@ -506,6 +512,18 @@ def main(argv: list[str] | None = None) -> int:
         print("  Voz:")
         for k, v in voice.diagnose().items():
             print(f"    {'sí' if v else 'no'}  {k}")
+        vcfg = cfg.get("voice", {})
+        if not vcfg.get("reply_with_voice", False):
+            print("    (no contesta en voz: [voice] reply_with_voice = false)")
+        elif vcfg.get("elevenlabs_voice") and voice.elevenlabs_disponible():
+            print(f"    hablará con la voz {vcfg['elevenlabs_voice']} de ElevenLabs")
+        elif vcfg.get("elevenlabs_voice"):
+            print("    ! hay voz de ElevenLabs configurada pero falta la clave "
+                  "o el paquete;")
+            print("      hablará con la voz local. Arréglalo con: make activar")
+        else:
+            print("    hablará con la voz local (piper). Para una voz realista: "
+                  "make voz-real")
         return 0
 
     key = os.environ.get("ANTHROPIC_API_KEY", "")

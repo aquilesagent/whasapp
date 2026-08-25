@@ -91,5 +91,22 @@ reply_with_voice = false
 # tiny / base / small / medium. "base" va fino en CPU y acierta bien en español.
 whisper_model = "base"
 language = "es"
-# Ruta al modelo .onnx de piper. Vacío = se usa espeak-ng si está instalado.
+
+# --- Qué voz usa Aquiles ---------------------------------------------------
+# Hay tres motores, de más a menos realista, y se cae al siguiente en cuanto
+# uno falla. Que ElevenLabs se quede sin créditos no debe dejarlo mudo.
+#
+# 1. ElevenLabs — indistinguible de una persona. Necesita ELEVENLABS_API_KEY
+#    (plan gratuito: 10.000 caracteres al mes). Pon aquí el ID de la voz:
+#      make voces        lista las que tienes y sus IDs
+#      make voz-real     te deja una elegida y probada
+elevenlabs_voice = ""
+# eleven_multilingual_v2 es el más realista en español. eleven_flash_v2_5
+# gasta la mitad de créditos y suena algo peor.
+elevenlabs_model = "eleven_multilingual_v2"
+#
+# 2. piper — local, sin clave y sin límite, pero se nota que es sintética.
+#    Ruta al modelo .onnx. Vacío = se usa el que haya descargado `make voz`.
 piper_voice = ""
+#
+# 3. espeak-ng — el último recurso, claramente robótico.
