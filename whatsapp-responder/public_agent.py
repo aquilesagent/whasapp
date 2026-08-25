@@ -120,6 +120,21 @@ def solicitar_reunion(de_parte_de: str, cuando: str, asunto: str,
 
 TOOLS = [dejar_recado, solicitar_reunion]
 
+# Buscar en internet, ejecutado por Anthropic. Para el agente publico viene
+# APAGADO por defecto, y no por miedo a que se filtre nada —no tiene con que—
+# sino por coste: cada busqueda se factura, y un desconocido puede pedir todas
+# las que quiera. Ademas mete en el modelo texto de paginas que nadie ha
+# revisado. Enciendelo cuando el negocio lo necesite, no "por si acaso".
+BUSQUEDA_WEB = {
+    "type": "web_search_20260209",
+    "name": "web_search",
+    "max_uses": 3,
+}
+
+
+def herramientas(con_busqueda: bool) -> list:
+    return [*TOOLS, BUSQUEDA_WEB] if con_busqueda else list(TOOLS)
+
 
 def system_prompt() -> str:
     conocimiento = _knowledge.strip() or (
@@ -161,7 +176,7 @@ LÍMITES QUE NO PUEDES SALTARTE
 
 
 def reply(chat_jid: str, phone: str, user_text: str, history_turns: int,
-          model: str) -> str:
+          model: str, buscar_en_web: bool = False) -> str:
     """Atiende un mensaje de un tercero. Cada contacto tiene su propio hilo."""
     if _state is None:
         raise RuntimeError("public_agent.configure() no ha sido llamado")
@@ -175,7 +190,7 @@ def reply(chat_jid: str, phone: str, user_text: str, history_turns: int,
         model=model,
         max_tokens=2048,
         system=system_prompt(),
-        tools=TOOLS,
+        tools=herramientas(buscar_en_web),
         messages=messages,
     )
 

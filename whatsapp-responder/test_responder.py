@@ -647,3 +647,33 @@ def test_the_hourly_cap_does_not_apply_to_the_owner(state, sent, monkeypatch):
         state.record_reply(f"{OWNER}@s.whatsapp.net")
     responder.handle(msg(OWNER, "sigues ahí?"), CONFIG, state, OWNER)
     assert sent and sent[-1][1] == "Dígame."
+
+
+# --------------------------------------------------------------------------
+# Búsqueda web
+# --------------------------------------------------------------------------
+
+def test_web_search_is_a_server_tool_with_a_cap():
+    """Sin tope, una sola pregunta encadena búsquedas y cada una se factura."""
+    for modulo in (responder.agent, public_agent):
+        t = modulo.BUSQUEDA_WEB
+        assert t["type"] == "web_search_20260209"
+        assert t["name"] == "web_search"
+        assert 1 <= t["max_uses"] <= 10
+
+
+def test_web_search_is_added_only_when_asked():
+    for modulo in (responder.agent, public_agent):
+        sin = modulo.herramientas(False)
+        con = modulo.herramientas(True)
+        assert len(con) == len(sin) + 1
+        assert modulo.BUSQUEDA_WEB not in sin
+        assert modulo.BUSQUEDA_WEB in con
+
+
+def test_the_public_agent_keeps_no_reading_tools_with_search_on():
+    """Añadir búsqueda no debe abrir por la puerta de atrás lo que el agente
+    público tiene prohibido."""
+    nombres = {t["name"] if isinstance(t, dict) else t.name
+               for t in public_agent.herramientas(True)}
+    assert nombres == {"dejar_recado", "solicitar_reunion", "web_search"}

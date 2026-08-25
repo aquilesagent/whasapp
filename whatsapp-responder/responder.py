@@ -230,6 +230,7 @@ def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
             text,
             history_turns=cfg["assistant"].get("history_turns", 40),
             model=cfg["assistant"].get("model", "claude-opus-5"),
+            buscar_en_web=cfg["assistant"].get("web_search", True),
         )
     except Exception as e:  # la API puede fallar; el bucle no debe morir
         log.exception("Fallo hablando con Claude")
@@ -290,6 +291,7 @@ def attend_stranger(msg: wa.Message, cfg: dict, state: State,
             history_turns=cfg["public"].get("history_turns", 20),
             model=cfg["public"].get(
                 "model", cfg["assistant"].get("model", "claude-opus-5")),
+            buscar_en_web=cfg["public"].get("web_search", False),
         )
     except Exception:
         log.exception("  -> fallo atendiendo al tercero")

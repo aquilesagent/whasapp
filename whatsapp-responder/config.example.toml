@@ -17,6 +17,10 @@ name = "Sr Marcos"
 [assistant]
 name = "Aquiles"
 model = "claude-opus-5"
+# Dejar que busque en internet cuando la respuesta dependa de algo actual.
+# Lo ejecuta Anthropic: no hace falta otra clave ni otro proveedor. Se factura
+# por búsqueda, con un tope de 5 por mensaje.
+web_search = true
 # Cuántos mensajes de vuestra conversación recuerda entre reinicios.
 history_turns = 40
 
@@ -30,6 +34,10 @@ enabled = true
 
 # Cuántos turnos recuerda de la conversación con cada contacto.
 history_turns = 20
+
+# Dejar que busque en internet al atender a terceros. APAGADO por defecto:
+# cada búsqueda se factura y un desconocido puede pedir todas las que quiera.
+web_search = false
 
 # Modelo para atender terceros. Si lo omites usa el de [assistant].
 # Aquí sí tiene sentido uno más barato: son conversaciones sencillas.

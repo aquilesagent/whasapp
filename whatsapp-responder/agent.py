@@ -144,6 +144,21 @@ TOOLS = [
     listar_reuniones,
 ]
 
+# Buscar en internet lo ejecuta Anthropic en sus servidores: no hay funcion
+# que implementar, ni proveedor aparte, ni otra clave. Se pasa el diccionario
+# tal cual junto a las demas herramientas.
+BUSQUEDA_WEB = {
+    "type": "web_search_20260209",
+    "name": "web_search",
+    # Sin tope, una sola pregunta puede encadenar muchas busquedas, y cada
+    # una se factura. Cinco cubre de sobra una consulta por WhatsApp.
+    "max_uses": 5,
+}
+
+
+def herramientas(con_busqueda: bool) -> list:
+    return [*TOOLS, BUSQUEDA_WEB] if con_busqueda else list(TOOLS)
+
 
 def system_prompt() -> str:
     return f"""Eres {_assistant_name}, el asistente personal de {_owner_name}.
@@ -163,10 +178,15 @@ Cómo responder:
 
 Tienes acceso a su WhatsApp: puedes leer sus chats, buscar en su historial,
 enviar mensajes en su nombre y llevarle la agenda de reuniones. Envía mensajes
-a terceros solo cuando te lo pida explícitamente."""
+a terceros solo cuando te lo pida explícitamente.
+
+Si tienes búsqueda web, úsala cuando la respuesta dependa de algo actual —
+precios, noticias, horarios, disponibilidad— o cuando no estés seguro. No la
+uses para lo que ya sabes. Di siempre de dónde sacaste el dato."""
 
 
-def reply(chat_jid: str, user_text: str, history_turns: int, model: str) -> str:
+def reply(chat_jid: str, user_text: str, history_turns: int, model: str,
+          buscar_en_web: bool = False) -> str:
     """Procesa un mensaje del dueño y devuelve la respuesta.
 
     Persiste el turno del usuario antes de llamar a la API, para que un fallo
@@ -183,7 +203,7 @@ def reply(chat_jid: str, user_text: str, history_turns: int, model: str) -> str:
         model=model,
         max_tokens=4096,
         system=system_prompt(),
-        tools=TOOLS,
+        tools=herramientas(buscar_en_web),
         messages=messages,
     )
 

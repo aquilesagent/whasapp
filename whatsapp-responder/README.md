@@ -106,6 +106,7 @@ En vuestra conversación, Aquiles tiene seis herramientas:
 | `leer_chat` | Leer una conversación concreta |
 | `agendar_reunion` | Apuntar una reunión |
 | `listar_reuniones` | Consultar la agenda |
+| `web_search` | Buscar en internet (`assistant.web_search = true`) |
 
 Así que le puedes escribir cosas como:
 
@@ -117,6 +118,35 @@ Así que le puedes escribir cosas como:
 
 Las reuniones se guardan en `state/responder.db`. Todavía no hay integración
 con ningún calendario: son la libreta de Aquiles.
+
+## Buscar en internet
+
+Con `assistant.web_search = true`, Aquiles consulta la web cuando la respuesta
+depende de algo actual — precios, noticias, horarios— o cuando no está seguro.
+
+Lo ejecuta Anthropic en sus servidores: **no hace falta otro proveedor ni otra
+clave**. Se factura por búsqueda, con un tope de 5 por mensaje para que una
+sola pregunta no encadene veinte.
+
+Para terceros va aparte, en `public.web_search`, y **apagado por defecto**. No
+es por lo que pudieran sacar —el agente público no tiene con qué— sino por
+coste: un desconocido puede pedir todas las búsquedas que quiera. Enciéndelo
+cuando el negocio lo pida, no por si acaso.
+
+## Generar ideas
+
+Ya lo hace, sin nada nuevo: es lo que un modelo de lenguaje hace de serie.
+Pídeselo y ya está.
+
+## Imágenes
+
+**No puede, y no es cuestión de activar nada.** Claude no genera imágenes, así
+que haría falta conectar otro proveedor (OpenAI, Stability, Replicate…) con su
+propia cuenta y su propia clave, facturada aparte.
+
+Si lo quieres, es media hora de trabajo: una herramienta nueva que llame a ese
+proveedor, guarde el resultado y lo mande con `send_file`. Pero decide primero
+qué proveedor, porque la calidad y el precio varían mucho.
 
 ## Notas de voz
 
@@ -189,7 +219,7 @@ historial ya sincronizado.
 ## Pruebas
 
 ```bash
-uv run pytest -q          # 54 pruebas
+uv run pytest -q          # 57 pruebas
 uv run responder.py --once   # procesa lo pendiente y sale
 ```
 
