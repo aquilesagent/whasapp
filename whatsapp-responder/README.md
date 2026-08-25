@@ -214,12 +214,32 @@ saludo en vez de un error repetido.
 No es tu suscripción a Claude: es una clave aparte de
 [console.anthropic.com](https://console.anthropic.com), de pago por uso.
 
+**No la pegues en un comando de la terminal**: acaba en el historial de bash,
+y si copias el ejemplo literal (`sk-ant-...`) la variable queda definida con
+basura — el respondedor lo detecta y se niega a arrancar, pero es tiempo
+perdido. Escríbela en un fichero, con un editor:
+
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+mkdir -p ~/.config/aquiles
+nano ~/.config/aquiles/env
 ```
 
-Para que no se pierda al cerrar la terminal, ponla en `~/.bashrc`, o en
-`~/.config/aquiles/env` si usas los servicios de systemd.
+Dentro, una sola línea con tu clave de verdad (la larga, sin comillas):
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-la-tuya-entera
+```
+
+Guarda (`Ctrl-O`, `Enter`, `Ctrl-X`) y engánchala a tus terminales:
+
+```bash
+chmod 600 ~/.config/aquiles/env
+echo 'set -a; . ~/.config/aquiles/env; set +a' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Ese mismo fichero es el que leen los servicios de systemd, así que sirve para
+las dos formas de arrancarlo.
 
 **6. Un tercero solo recibió el saludo y nada más.** Comprueba
 `[public].enabled = true`. Con `false`, tras el saludo se calla.

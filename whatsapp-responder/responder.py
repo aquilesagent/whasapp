@@ -75,6 +75,25 @@ def load_config(path: str = CONFIG_PATH) -> dict:
     return cfg
 
 
+def looks_like_placeholder(key: str) -> bool:
+    """Detecta que se ha copiado el ejemplo de la documentacion en vez de la
+    clave real.
+
+    Pasa mas de lo que parece: el ejemplo se escribe `sk-ant-...` y se pega
+    tal cual. La variable queda definida, asi que ninguna comprobacion de
+    "¿existe?" lo detecta, y el fallo aparece mucho despues como un 401 raro.
+    """
+    k = key.strip()
+    if not k:
+        return False
+    if k.endswith("...") or "…" in k:
+        return True
+    if not k.startswith("sk-ant-"):
+        return True
+    # Las de verdad rondan los 100 caracteres; nada corto es real.
+    return len(k) < 40
+
+
 def is_owner(msg: wa.Message, owner_phone: str) -> bool:
     """El dueño escribiendo desde su móvil. Se compara solo el número: WhatsApp
     añade sufijos de dispositivo (:12) y servidores distintos según el caso."""
@@ -348,7 +367,12 @@ def main(argv: list[str] | None = None) -> int:
                       "Aquiles apenas sabrá qué contar")
         else:
             print("  Terceros:   solo saludo fijo ([public].enabled = false)")
-        if os.environ.get("ANTHROPIC_API_KEY"):
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if key and looks_like_placeholder(key):
+            print(f"  API key:    NO ES UNA CLAVE — es el marcador '{key}'")
+            print("              Copiaste el ejemplo literal. Pon la clave de")
+            print("              verdad, la larga que empieza por sk-ant-api")
+        elif key:
             print("  API key:    presente")
         else:
             print("  API key:    AUSENTE — SIN ESTO NO RESPONDE NADIE")
@@ -364,7 +388,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    {'sí' if v else 'no'}  {k}")
         return 0
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if key and looks_like_placeholder(key):
+        raise SystemExit(
+            f"ANTHROPIC_API_KEY vale '{key}', que es el marcador de la\n"
+            "documentación, no una clave. Se copió el ejemplo literal.\n\n"
+            "Pon la clave de verdad — la larga que empieza por 'sk-ant-api'.\n"
+            "Si la dejas así, cada mensaje fallará con un error de "
+            "autenticación."
+        )
+
+    if not key:
         log.error("=" * 60)
         log.error("ANTHROPIC_API_KEY no está definida. Sin ella no hay modelo.")
         log.error("  - Tu conversación con el asistente NO funcionará.")

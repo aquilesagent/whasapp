@@ -377,3 +377,24 @@ def test_public_prompt_states_the_caller_is_not_the_owner():
 def test_public_prompt_survives_empty_knowledge():
     public_agent.configure(None, "58412", "Sr Marcos", "Aquiles", "")
     assert "no sabes" in public_agent.system_prompt().lower()
+
+
+# --------------------------------------------------------------------------
+# La clave copiada del ejemplo
+# --------------------------------------------------------------------------
+
+def test_placeholder_keys_are_detected():
+    """Pegar el ejemplo literal define la variable, así que comprobar solo
+    que existe no sirve: el fallo aparece después como un 401 confuso."""
+    for fake in ["sk-ant-...", "sk-ant-api03-...", "sk-ant-…",
+                 "tu-clave-aqui", "sk-ant-corta", ""]:
+        if fake == "":
+            assert not responder.looks_like_placeholder(fake), \
+                "vacío es 'sin clave', no un marcador"
+        else:
+            assert responder.looks_like_placeholder(fake), f"{fake!r} es un marcador"
+
+
+def test_a_real_looking_key_passes():
+    real = "sk-ant-api03-" + "A1b2C3d4E5f6G7h8" * 5
+    assert not responder.looks_like_placeholder(real)
