@@ -24,6 +24,21 @@ GROUP_SUFFIX = "@g.us"
 LID_SUFFIX = "@lid"
 
 
+def ahora() -> datetime:
+    """Momento actual, con zona horaria.
+
+    Las marcas de tiempo que escribe el bridge llevan desfase horario, asi
+    que compararlas con un `datetime.now()` ingenuo revienta con TypeError.
+    Todo lo que se compare con la base tiene que salir de aqui.
+    """
+    return datetime.now().astimezone()
+
+
+def con_zona(dt: datetime) -> datetime:
+    """Le pone la zona local a una fecha que no la traiga."""
+    return dt if dt.tzinfo is not None else dt.astimezone()
+
+
 @dataclass(frozen=True)
 class Message:
     id: str
@@ -48,8 +63,14 @@ class Message:
 
     @property
     def is_lid(self) -> bool:
-        """El remitente viene identificado por LID en vez de por numero."""
-        return self.sender.endswith(LID_SUFFIX)
+        """El remitente viene identificado por LID en vez de por numero.
+
+        Hay que mirar `chat_jid`, no `sender`: el bridge guarda el remitente
+        como `msg.Info.Sender.User`, que es solo la parte de usuario y nunca
+        lleva sufijo. Comprobarlo ahi daba siempre falso, asi que el dueño
+        seguia sin reconocerse aunque la traduccion funcionara.
+        """
+        return self.chat_jid.endswith(LID_SUFFIX)
 
 
 class BridgeUnavailable(RuntimeError):
@@ -90,7 +111,7 @@ def fetch_incoming_since(after: datetime, limit: int = 50) -> list[Message]:
         ts = r["timestamp"]
         if isinstance(ts, str):
             try:
-                ts = datetime.fromisoformat(ts)
+                ts = con_zona(datetime.fromisoformat(ts))
             except ValueError:
                 continue
         out.append(
@@ -114,12 +135,12 @@ def latest_timestamp() -> datetime:
     t = row["t"] if row else None
     if isinstance(t, str):
         try:
-            return datetime.fromisoformat(t)
+            return con_zona(datetime.fromisoformat(t))
         except ValueError:
             pass
     if isinstance(t, datetime):
-        return t
-    return datetime.now()
+        return con_zona(t)
+    return ahora()
 
 
 def send_message(recipient: str, text: str) -> tuple[bool, str]:

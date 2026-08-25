@@ -40,7 +40,30 @@ intenta el import nuevo y cae al viejo si hace falta, así que funciona con
 `uv.lock` regenerado (`uv lock --upgrade`): `mcp` 1.6 → 2.1, más el resto de
 transitivas.
 
-## 4. Añadidos de este repo
+## 4. El `direct_path` de los adjuntos
+
+Descargar una nota de voz devolvía **403** desde `mmg.whatsapp.net`. La causa
+está en cómo el upstream reconstruye la descarga: no guardaba el `direct_path`
+que da WhatsApp, sino que lo derivaba de la URL cortando por `?`.
+
+Ese corte es justo el problema. El `direct_path` real trae su propia query
+string (`?ccb=…&oh=…&oe=…`), y ahí van los parámetros de autenticación del CDN.
+Además whatsmeow une sus propios parámetros con `&`, no con `?`:
+
+```go
+mediaURL := fmt.Sprintf("https://%s%s&hash=%s&mms-type=%s…", host, directPath, …)
+```
+
+Con un path sin query, eso produce una URL sin `?` y sin autenticación. De ahí
+el 403.
+
+Ahora se guarda el `direct_path` tal cual lo entrega WhatsApp, en una columna
+nueva. Las bases anteriores se migran con `ALTER TABLE` al abrirlas, en vez de
+pedir que se borren: dentro está todo el historial sincronizado. Para los
+mensajes viejos que no lo tengan se sigue derivando de la URL, con el fallo
+conocido.
+
+## 5. Añadidos de este repo
 
 `scripts/setup.sh`, `scripts/bridge.sh`, `Makefile`, `.mcp.json` y `.gitignore`
 (este último para que la sesión de WhatsApp y la base de mensajes nunca acaben

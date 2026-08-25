@@ -592,3 +592,48 @@ def test_voice_off_means_text_even_for_a_voice_note(state, sent, audios,
     responder.handle(voz_msg(OWNER, "hola"), CONFIG, state, OWNER)
     assert not audios
     assert sent
+
+
+# --------------------------------------------------------------------------
+# Dos bugs que se colaron en la primera versión del arreglo de LID
+# --------------------------------------------------------------------------
+
+def test_is_lid_reads_chat_jid_not_sender():
+    """El bridge guarda `msg.Info.Sender.User`, que nunca lleva sufijo. Mirar
+    el sufijo en `sender` daba siempre falso y el arreglo de LID no servía de
+    nada. El sufijo está en `chat_jid`."""
+    real = wa.Message(id="x", chat_jid="67495578882103@lid",
+                      sender="67495578882103",       # pelado, como lo guarda el bridge
+                      content="hola", timestamp=datetime.now(), media_type=None)
+    assert real.is_lid, "un mensaje por LID debe detectarse aunque sender no lleve sufijo"
+
+    normal = wa.Message(id="y", chat_jid="584241983140@s.whatsapp.net",
+                        sender="584241983140", content="hola",
+                        timestamp=datetime.now(), media_type=None)
+    assert not normal.is_lid
+
+
+def test_the_owner_is_recognised_with_a_bare_lid_sender(monkeypatch):
+    """El caso real de punta a punta, con los campos tal y como los escribe
+    el bridge."""
+    monkeypatch.setattr(wa, "phone_for_lid",
+                        lambda s: OWNER if s.startswith(OWNER_LID) else None)
+    m = wa.Message(id="z", chat_jid=f"{OWNER_LID}@lid", sender=OWNER_LID,
+                   content="hola", timestamp=datetime.now(), media_type=None)
+    assert responder.is_owner(m, OWNER)
+
+
+def test_times_from_the_bridge_compare_without_exploding():
+    """Las marcas del bridge llevan desfase horario; compararlas con un
+    datetime ingenuo lanza TypeError y tumba --replay-minutes."""
+    from datetime import timedelta, timezone
+    con_desfase = datetime(2026, 8, 25, 12, 0, tzinfo=timezone(timedelta(hours=-4)))
+    # Ninguna de estas debe lanzar.
+    assert wa.ahora() > con_desfase - timedelta(days=3650)
+    assert max(wa.ahora(), con_desfase)
+    assert wa.con_zona(datetime(2026, 8, 25, 12, 0)).tzinfo is not None
+    assert wa.con_zona(con_desfase) is con_desfase
+
+
+def test_ahora_is_always_aware():
+    assert wa.ahora().tzinfo is not None

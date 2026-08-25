@@ -102,6 +102,8 @@ class State:
             last = datetime.fromisoformat(row["last_greeted"])
         except ValueError:
             return True
+        # Ambas ingenuas: este reloj es solo del respondedor, no se compara
+        # nunca con las marcas del bridge.
         return datetime.now() - last >= timedelta(hours=cooldown_hours)
 
     def mark_greeted(self, chat_jid: str) -> None:

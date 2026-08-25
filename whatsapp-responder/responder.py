@@ -346,9 +346,13 @@ def run(cfg: dict, once: bool = False, replay_minutes: int | None = None) -> int
         log.info("Agente público desactivado: los terceros solo reciben el saludo")
 
     watermark = state.get_watermark()
+    if watermark is not None:
+        watermark = wa.con_zona(watermark)
     if replay_minutes:
         from datetime import timedelta
-        watermark = datetime.now() - timedelta(minutes=replay_minutes)
+        # wa.ahora() y no datetime.now(): las marcas del bridge llevan zona
+        # horaria, y comparar con una ingenua lanza TypeError a mitad del bucle.
+        watermark = wa.ahora() - timedelta(minutes=replay_minutes)
         state.set_watermark(watermark)
         log.info("Reproduciendo los últimos %d minutos desde %s",
                  replay_minutes, watermark)
