@@ -56,12 +56,36 @@ cd whasapp
 make setup          # comprueba requisitos, compila el bridge, instala deps
 ```
 
-Después, arranca el bridge y escanea el QR con el móvil
-(**WhatsApp → Ajustes → Dispositivos vinculados → Vincular dispositivo**):
+### Vincular el móvil
 
 ```bash
 make bridge
 ```
+
+**El QR se dibuja en la propia terminal**, no en `web.whatsapp.com`. No hace
+falta abrir ninguna página: el bridge *sustituye* a WhatsApp Web, se vincula
+como un dispositivo más. Verás algo así:
+
+```
+Scan this QR code with your WhatsApp app:
+
+▄▄▄▄▄▄▄ ▄▄  ▄ ▄▄▄▄▄▄▄
+█ ▄▄▄ █ ▀█▄▀▀ █ ▄▄▄ █
+█ ███ █ █ ▄▀█ █ ███ █
+...
+```
+
+Con eso en pantalla, en el móvil: **WhatsApp → Ajustes → Dispositivos
+vinculados → Vincular un dispositivo**, y apunta la cámara al QR de la
+terminal.
+
+Dos detalles que hacen fallar el escaneo:
+
+- El QR necesita unas 40 líneas de alto. Si sale cortado o aplastado,
+  maximiza la ventana y reduce el tamaño de letra (`Ctrl -` / `Cmd -`) hasta
+  que se vea el cuadrado completo.
+- Caduca a los **3 minutos**. Si tardas verás `Timeout waiting for QR code
+  scan`; relanza `make bridge` para obtener uno nuevo.
 
 La primera sincronización tarda un rato según tu historial. La sesión queda
 guardada en `whatsapp-bridge/store/`, así que solo escaneas una vez —
@@ -136,6 +160,9 @@ make clean    # borra binarios y .venv (conserva la sesión de WhatsApp)
 | Síntoma | Solución |
 | --- | --- |
 | `Failed to connect: ... Forbidden` | Sin salida a `web.whatsapp.com` (proxy/firewall/sandbox). Comprueba la red. |
+| No encuentro dónde escanear | El QR sale **en la terminal** donde corriste `make bridge`, no en web.whatsapp.com. |
+| El QR sale cortado o deforme | Agranda la ventana y reduce el tamaño de letra hasta que quepa entero. |
+| `Timeout waiting for QR code scan` | Caducó a los 3 minutos. Relanza `make bridge`. |
 | El QR no aparece | Borra `whatsapp-bridge/store/` y vuelve a arrancar el bridge. |
 | `no such table: messages` | El bridge no ha corrido nunca o no terminó de sincronizar. |
 | Claude dice que no puede enviar | El bridge no está corriendo. `make bridge`. |
