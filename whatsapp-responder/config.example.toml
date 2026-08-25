@@ -20,6 +20,36 @@ model = "claude-opus-5"
 # Cuántos mensajes de vuestra conversación recuerda entre reinicios.
 history_turns = 40
 
+# ---------------------------------------------------------------------------
+# Aquiles atendiendo a terceros
+# ---------------------------------------------------------------------------
+[public]
+# true  = conversa con cualquiera que le escriba, usando lo de [public.knowledge]
+# false = a los terceros solo les manda el saludo fijo y nada más
+enabled = true
+
+# Cuántos turnos recuerda de la conversación con cada contacto.
+history_turns = 20
+
+# Modelo para atender terceros. Si lo omites usa el de [assistant].
+# Aquí sí tiene sentido uno más barato: son conversaciones sencillas.
+# model = "claude-sonnet-5"
+
+# LO QUE SABE CONTAR. Esto es lo que Aquiles puede responder por su cuenta;
+# aquí es donde lo vas educando. Escríbelo como se lo explicarías a un
+# empleado nuevo. Si le preguntan algo que no está aquí, no se lo inventa:
+# lo dice y ofrece dejarle un recado al jefe.
+knowledge = """
+El Sr Marcos atiende consultas de lunes a viernes, de 9 a 18, hora de Caracas.
+
+Para reunirse con él hay que pedir cita: pregunta nombre, día, hora y motivo,
+y usa solicitar_reunion. La confirma él, nunca tú.
+
+(Añade aquí lo tuyo: a qué se dedica, qué servicios ofrece, precios que sí se
+pueden decir, dónde está, qué NO debe contarse. Cuanto más concreto, mejor
+atiende.)
+"""
+
 [greeting]
 # Respuesta FIJA a cualquiera que no seas tú. No pasa por el modelo, así que
 # nadie puede manipularla con lo que escriba.

@@ -21,6 +21,7 @@ import tomllib
 from datetime import datetime
 
 import agent
+import public_agent
 import voice
 import wa
 from state import State
@@ -109,6 +110,7 @@ def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
     log.info("Dueño: %s", text[:120])
     try:
         answer = agent.reply(
+            msg.chat_jid,
             text,
             history_turns=cfg["assistant"].get("history_turns", 40),
             model=cfg["assistant"].get("model", "claude-opus-5"),
@@ -144,25 +146,70 @@ def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
         log.error("No se pudo responder al dueño: %s", detail)
 
 
-def greet_stranger(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -> None:
+def attend_stranger(msg: wa.Message, cfg: dict, state: State,
+                    owner_phone: str) -> None:
+    """Atiende a un tercero.
+
+    El primer contacto recibe el saludo literal de config.toml — son las
+    palabras del dueño y no las reescribe ningún modelo. A partir de ahí, si
+    [public] está activo, conversa; si no, se queda en el saludo.
+    """
     greeting = cfg["greeting"]
-    if not state.should_greet(msg.chat_jid, greeting.get("cooldown_hours", 12)):
+    primera_vez = state.should_greet(msg.chat_jid,
+                                     greeting.get("cooldown_hours", 12))
+
+    if primera_vez:
+        ok, detail = wa.send_message(msg.chat_jid, greeting["text"])
+        if not ok:
+            log.error("  -> no se pudo saludar: %s", detail)
+            return
+        state.mark_greeted(msg.chat_jid)
+        state.record_reply(msg.chat_jid)
+        # El saludo entra en su hilo para que la conversación siga con
+        # coherencia: el modelo debe saber que ya se presentó.
+        state.append_turn(msg.chat_jid, "user", describe_incoming(msg, cfg))
+        state.append_turn(msg.chat_jid, "assistant", greeting["text"])
+        log.info("  -> primer contacto, saludo enviado")
+
+        if greeting.get("notify_owner", True):
+            quien = msg.sender_phone or msg.chat_jid
+            dijo = describe_incoming(msg, cfg)[:400]
+            wa.send_message(
+                owner_phone,
+                f"Le ha escrito {quien}:\n\n{dijo}\n\nYa le envié el saludo.",
+            )
         return
 
-    ok, detail = wa.send_message(msg.chat_jid, greeting["text"])
-    if not ok:
-        log.error("No se pudo saludar a %s: %s", msg.chat_jid, detail)
+    if not cfg.get("public", {}).get("enabled", False):
+        log.info("  -> ya saludado y [public] desactivado, no respondo")
         return
 
-    state.mark_greeted(msg.chat_jid)
-    state.record_reply(msg.chat_jid)
-    log.info("Saludo enviado a %s", msg.chat_jid)
+    text = describe_incoming(msg, cfg)
+    if not text.strip():
+        return
 
-    if greeting.get("notify_owner", True):
-        quien = msg.sender_phone or msg.chat_jid
-        dijo = describe_incoming(msg, cfg)[:400]
-        aviso = f"Le ha escrito {quien}:\n\n{dijo}\n\nYa le envié el saludo."
-        wa.send_message(owner_phone, aviso)
+    try:
+        answer = public_agent.reply(
+            msg.chat_jid,
+            msg.sender_phone,
+            text,
+            history_turns=cfg["public"].get("history_turns", 20),
+            model=cfg["public"].get(
+                "model", cfg["assistant"].get("model", "claude-opus-5")),
+        )
+    except Exception:
+        log.exception("  -> fallo atendiendo al tercero")
+        # Nunca se filtra el error a un desconocido: no tiene por qué saber
+        # qué hay detrás ni qué ha fallado.
+        answer = ("Disculpe, ahora mismo no puedo atenderle bien. "
+                  "Le paso el mensaje al Sr. y le responderá.")
+
+    ok, detail = wa.send_message(msg.chat_jid, answer)
+    if ok:
+        state.record_reply(msg.chat_jid)
+        log.info("  -> atendido por el agente público")
+    else:
+        log.error("  -> no se pudo responder: %s", detail)
 
 
 def handle(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -> None:
@@ -183,9 +230,8 @@ def handle(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -> None:
         log.info("  -> es el dueño, va al modelo")
         reply_to_owner(msg, cfg, state)
     else:
-        log.info("  -> es un tercero (%s != %s), saludo fijo",
-                 msg.sender_phone, owner_phone)
-        greet_stranger(msg, cfg, state, owner_phone)
+        log.info("  -> es un tercero (%s != %s)", msg.sender_phone, owner_phone)
+        attend_stranger(msg, cfg, state, owner_phone)
 
 
 def run(cfg: dict, once: bool = False, replay_minutes: int | None = None) -> int:
@@ -196,6 +242,18 @@ def run(cfg: dict, once: bool = False, replay_minutes: int | None = None) -> int
         owner_name=cfg["owner"].get("name", "el jefe"),
         assistant_name=cfg["assistant"].get("name", "Aquiles"),
     )
+    public_agent.configure(
+        state,
+        owner_phone=owner_phone,
+        owner_name=cfg["owner"].get("name", "el jefe"),
+        assistant_name=cfg["assistant"].get("name", "Aquiles"),
+        knowledge=cfg.get("public", {}).get("knowledge", ""),
+    )
+    if cfg.get("public", {}).get("enabled", False):
+        log.info("Agente público ACTIVO: contesta a cualquiera (herramientas: %s)",
+                 ", ".join(t.name for t in public_agent.TOOLS))
+    else:
+        log.info("Agente público desactivado: los terceros solo reciben el saludo")
 
     watermark = state.get_watermark()
     if replay_minutes:
@@ -278,6 +336,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Dueño:      {cfg['owner']['phone']} ({cfg['owner'].get('name')})")
         print(f"  Modelo:     {cfg['assistant'].get('name')} / {cfg['assistant'].get('model')}")
         print(f"  Saludo:     {cfg['greeting']['text'][:60]}...")
+        pub = cfg.get("public", {})
+        if pub.get("enabled", False):
+            saber = len(pub.get("knowledge", "").strip())
+            print(f"  Terceros:   ATENDIDOS por el modelo "
+                  f"({saber} caracteres de conocimiento)")
+            print(f"              herramientas: "
+                  f"{', '.join(t.name for t in public_agent.TOOLS)}")
+            if saber < 50:
+                print("              ! [public.knowledge] casi vacío — "
+                      "Aquiles apenas sabrá qué contar")
+        else:
+            print("  Terceros:   solo saludo fijo ([public].enabled = false)")
         print(f"  API key:    {'presente' if os.environ.get('ANTHROPIC_API_KEY') else 'AUSENTE (exporta ANTHROPIC_API_KEY)'}")
         print("  Voz:")
         for k, v in voice.diagnose().items():

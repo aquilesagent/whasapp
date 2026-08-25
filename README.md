@@ -185,10 +185,16 @@ y reinicia la app.
 Además del MCP (donde tú preguntas y Claude responde), el repo trae un
 **respondedor** que atiende WhatsApp solo, por dos caminos separados:
 
-- **Cualquiera que te escriba** recibe un texto fijo de presentación. No pasa
-  por ningún modelo, así que nadie puede manipularlo con lo que escriba.
-- **Tú** conversas con Claude, que tiene herramientas para leer tus chats,
-  buscar en tu historial, enviar mensajes en tu nombre y llevarte la agenda.
+- **Cualquiera que te escriba** es atendido por Claude, que responde con lo que
+  le hayas enseñado en `public.knowledge`, toma recados y solicita reuniones.
+  Sus únicas herramientas son esas dos: no puede leer tus chats ni escribir a
+  nadie más, así que una inyección de prompt no tiene nada que sacar.
+- **Tú** conversas con otro agente distinto, ese sí con herramientas para leer
+  tus chats, buscar en tu historial, enviar mensajes en tu nombre y llevarte
+  la agenda.
+
+El primer contacto de cada persona recibe tu saludo **literal**, sin pasar por
+ningún modelo.
 
 También transcribe las notas de voz que le manden, y puede responder en voz.
 

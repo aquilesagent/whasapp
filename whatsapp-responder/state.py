@@ -31,12 +31,15 @@ CREATE TABLE IF NOT EXISTS replies (
 CREATE INDEX IF NOT EXISTS idx_replies ON replies (chat_jid, sent_at);
 CREATE TABLE IF NOT EXISTS conversation (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_jid TEXT NOT NULL DEFAULT '',
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_conversation ON conversation (chat_jid, id);
 CREATE TABLE IF NOT EXISTS meetings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_by TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL,
     when_text TEXT NOT NULL,
     with_whom TEXT NOT NULL,
@@ -52,7 +55,20 @@ class State:
         self.conn = sqlite3.connect(path, timeout=10)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Una base creada antes de que hubiera conversaciones por contacto no
+        tiene estas columnas. Se añaden en vez de pedir que se borre: dentro
+        hay el historial con el dueño y sus reuniones."""
+        for table, column, ddl in (
+            ("conversation", "chat_jid", "ALTER TABLE conversation ADD COLUMN chat_jid TEXT NOT NULL DEFAULT ''"),
+            ("meetings", "requested_by", "ALTER TABLE meetings ADD COLUMN requested_by TEXT NOT NULL DEFAULT ''"),
+        ):
+            cols = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            if column not in cols:
+                self.conn.execute(ddl)
 
     def close(self) -> None:
         self.conn.close()
@@ -113,16 +129,20 @@ class State:
         return int(row["n"]) if row else 0
 
     # --- conversacion con el dueño -------------------------------------
-    def append_turn(self, role: str, content) -> None:
+    def append_turn(self, chat_jid: str, role: str, content) -> None:
         self.conn.execute(
-            "INSERT INTO conversation (role, content, created_at) VALUES (?, ?, ?)",
-            (role, json.dumps(content, ensure_ascii=False), datetime.now().isoformat()),
+            "INSERT INTO conversation (chat_jid, role, content, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (chat_jid, role, json.dumps(content, ensure_ascii=False),
+             datetime.now().isoformat()),
         )
         self.conn.commit()
 
-    def recent_turns(self, limit: int) -> list[dict]:
+    def recent_turns(self, chat_jid: str, limit: int) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT role, content FROM conversation ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT role, content FROM conversation WHERE chat_jid = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (chat_jid, limit),
         ).fetchall()
         out = []
         for r in reversed(rows):
@@ -136,18 +156,20 @@ class State:
         return out
 
     # --- reuniones ------------------------------------------------------
-    def add_meeting(self, title: str, when_text: str, with_whom: str, notes: str = "") -> int:
+    def add_meeting(self, title: str, when_text: str, with_whom: str,
+                    notes: str = "", requested_by: str = "") -> int:
         cur = self.conn.execute(
-            "INSERT INTO meetings (title, when_text, with_whom, notes, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (title, when_text, with_whom, notes, datetime.now().isoformat()),
+            "INSERT INTO meetings (requested_by, title, when_text, with_whom, "
+            "notes, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (requested_by, title, when_text, with_whom, notes,
+             datetime.now().isoformat()),
         )
         self.conn.commit()
         return int(cur.lastrowid)
 
     def list_meetings(self, limit: int = 20) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT id, title, when_text, with_whom, notes FROM meetings "
+            "SELECT id, title, when_text, with_whom, notes, requested_by FROM meetings "
             "ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()

@@ -166,7 +166,7 @@ enviar mensajes en su nombre y llevarle la agenda de reuniones. Envía mensajes
 a terceros solo cuando te lo pida explícitamente."""
 
 
-def reply(user_text: str, history_turns: int, model: str) -> str:
+def reply(chat_jid: str, user_text: str, history_turns: int, model: str) -> str:
     """Procesa un mensaje del dueño y devuelve la respuesta.
 
     Persiste el turno del usuario antes de llamar a la API, para que un fallo
@@ -175,8 +175,8 @@ def reply(user_text: str, history_turns: int, model: str) -> str:
     if _state is None:
         raise RuntimeError("agent.configure() no ha sido llamado")
 
-    _state.append_turn("user", user_text)
-    messages = _state.recent_turns(history_turns)
+    _state.append_turn(chat_jid, "user", user_text)
+    messages = _state.recent_turns(chat_jid, history_turns)
 
     client = anthropic.Anthropic()
     runner = client.beta.messages.tool_runner(
@@ -197,5 +197,5 @@ def reply(user_text: str, history_turns: int, model: str) -> str:
     text = "\n".join(b.text for b in final.content if b.type == "text").strip()
     if not text:
         text = "Hecho."
-    _state.append_turn("assistant", text)
+    _state.append_turn(chat_jid, "assistant", text)
     return text
