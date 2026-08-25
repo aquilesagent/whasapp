@@ -1,10 +1,13 @@
-.PHONY: setup bridge responder responder-check build check doctor clean
+.PHONY: setup activar bridge responder responder-check build check doctor clean
 
 setup:   ## Instala dependencias y compila todo
 	./scripts/setup.sh
 
 bridge:  ## Arranca el bridge de WhatsApp (muestra el QR la primera vez)
 	./scripts/bridge.sh
+
+activar:         ## Guarda la clave de la API y deja el respondedor listo
+	./scripts/activar.sh
 
 responder:       ## Arranca el respondedor automatico (Aquiles)
 	cd whatsapp-responder && uv run responder.py

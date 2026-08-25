@@ -214,6 +214,24 @@ saludo en vez de un error repetido.
 No es tu suscripción a Claude: es una clave aparte de
 [console.anthropic.com](https://console.anthropic.com), de pago por uso.
 
+### La vía corta
+
+Copia la clave en la consola de Anthropic (botón «Copiar clave») y, desde la
+raíz del repositorio:
+
+```bash
+make activar
+```
+
+Lee la clave del portapapeles, la guarda en `~/.config/aquiles/env` con
+permisos `600`, corrige `owner.name` si quedó con el nombre del asistente, y
+te enseña el resultado de `--check`. No hay que teclear la clave en ningún
+sitio, así que no acaba en el historial de bash ni en ninguna conversación.
+
+Si prefieres pasarla a mano: `./scripts/activar.sh sk-ant-api03-...`
+
+### A mano
+
 **No la pegues en un comando de la terminal**: acaba en el historial de bash,
 y si copias el ejemplo literal (`sk-ant-...`) la variable queda definida con
 basura — el respondedor lo detecta y se niega a arrancar, pero es tiempo
