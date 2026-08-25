@@ -1018,6 +1018,11 @@ func GetChatName(client *whatsmeow.Client, messageStore *MessageStore, jid types
 		contact, err := client.Store.Contacts.GetContact(context.Background(), jid)
 		if err == nil && contact.FullName != "" {
 			name = contact.FullName
+		} else if pnName, ok := contactNameViaLID(client, jid, logger); ok {
+			// WhatsApp expone cada vez mas remitentes como LID (@lid) en vez
+			// del numero. La agenda esta indexada por numero, asi que sin
+			// traducir el LID el contacto siempre sale "sin nombre".
+			name = pnName
 		} else if sender != "" {
 			// Fallback to sender
 			name = sender
@@ -1474,4 +1479,30 @@ func envEnabled(name string) bool {
 		return true
 	}
 	return false
+}
+
+// contactNameViaLID traduce un JID oculto (@lid) al numero de telefono con el
+// mapeo que mantiene whatsmeow, y busca el contacto por ese numero. Devuelve
+// false si el JID no es un LID o si aun no hay mapeo conocido.
+func contactNameViaLID(client *whatsmeow.Client, jid types.JID, logger waLog.Logger) (string, bool) {
+	if jid.Server != types.HiddenUserServer {
+		return "", false
+	}
+	if client.Store == nil || client.Store.LIDs == nil {
+		return "", false
+	}
+	pn, err := client.Store.LIDs.GetPNForLID(context.Background(), jid)
+	if err != nil {
+		logger.Warnf("No se pudo traducir el LID %s a numero: %v", jid, err)
+		return "", false
+	}
+	if pn.IsEmpty() {
+		return "", false
+	}
+	contact, err := client.Store.Contacts.GetContact(context.Background(), pn)
+	if err != nil || contact.FullName == "" {
+		// Sin nombre en la agenda, el numero sigue siendo mas util que el LID.
+		return pn.User, true
+	}
+	return contact.FullName, true
 }

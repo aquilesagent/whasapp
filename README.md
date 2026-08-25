@@ -238,6 +238,8 @@ Variables que entiende el bridge:
 | `make: No targets specified` | No estás dentro del directorio `whasapp`, o no lo has clonado. |
 | `requires go >= 1.26.0` | Go demasiado viejo y sin red para autodescargarse. Instálalo desde [go.dev/dl](https://go.dev/dl/). |
 | Dejó de conectar tras semanas | Sesión caducada: borra `whatsapp-bridge/store/` y reescanea. |
+| Un contacto sale sin nombre | Si WhatsApp lo expone como `@lid`, el bridge lo traduce a número; si el mapeo aún no ha llegado, verás el identificador hasta que sincronice. |
+| `Ya hay un bridge escuchando` | Correcto: solo puede haber uno. `make doctor` te dice cómo está el que corre. |
 
 Ante cualquier duda, `make doctor` revisa requisitos, build, sesión vinculada,
 mensajes sincronizados y si el bridge está escuchando, y te dice qué arreglar.
