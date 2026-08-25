@@ -8,6 +8,11 @@
 #
 # El portapapeles es la vía preferida: la clave no pasa por el historial de
 # bash ni por ninguna conversación.
+#
+# Acepta las dos claves que usa Aquiles y distingue cuál es por el prefijo: la
+# de Anthropic (sk-ant-...) es la que le hace hablar, y la de OpenAI
+# (sk-proj-...) solo hace falta para generar imágenes. Guardar una no borra la
+# otra.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,7 +47,7 @@ if [ -z "$CLAVE" ] && [ ! -t 0 ]; then
 fi
 
 if [ -z "$CLAVE" ]; then
-  CLAVE="$(leer_portapapeles | grep -o 'sk-ant-[A-Za-z0-9_-]*' | head -1)"
+  CLAVE="$(leer_portapapeles | grep -oE 'sk-(ant|proj|svcacct)-[A-Za-z0-9_-]*' | head -1)"
   ORIGEN="el portapapeles"
 fi
 
@@ -54,12 +59,17 @@ if [ -z "$CLAVE" ]; then
   echo "Copia la clave desde https://console.anthropic.com (botón «Copiar"
   echo "clave») y vuelve a ejecutar esto. O pásala directamente:"
   echo "    ./scripts/activar.sh sk-ant-api03-loquesea"
+  echo
+  echo "Para que además genere imágenes, repite esto mismo con la clave de"
+  echo "OpenAI (https://platform.openai.com/api-keys). Es otra cuenta y otra"
+  echo "factura; guardar una no borra la otra."
   exit 1
 fi
 
 case "$CLAVE" in
-  sk-ant-*) ;;
-  *) rojo "Eso no parece una clave de Anthropic: no empieza por 'sk-ant-'."
+  sk-ant-*)               VARIABLE="ANTHROPIC_API_KEY"; QUIEN="Anthropic (hablar)" ;;
+  sk-proj-*|sk-svcacct-*) VARIABLE="OPENAI_API_KEY";    QUIEN="OpenAI (imágenes)" ;;
+  *) rojo "Eso no parece una clave: no empieza por 'sk-ant-' ni por 'sk-proj-'."
      echo "Encontrado en $ORIGEN: ${CLAVE:0:12}..."
      exit 1 ;;
 esac
@@ -72,10 +82,19 @@ fi
 
 # --- 2. Guardarla ----------------------------------------------------------
 mkdir -p "$ENV_DIR"
-printf 'ANTHROPIC_API_KEY=%s\n' "$CLAVE" > "$ENV_FILE"
-chmod 600 "$ENV_FILE"
-verde "✓ Clave guardada en $ENV_FILE (desde $ORIGEN)"
-echo "  ${CLAVE:0:16}…${CLAVE: -4}   ${#CLAVE} caracteres"
+python3 "$ROOT/scripts/guardar_clave.py" "$ENV_FILE" "$VARIABLE" "$CLAVE" || exit 1
+verde "✓ Clave de $QUIEN guardada en $ENV_FILE (desde $ORIGEN)"
+echo "  $VARIABLE = ${CLAVE:0:16}…${CLAVE: -4}   ${#CLAVE} caracteres"
+
+# El paquete de imágenes solo se instala cuando hay clave para usarlo: son
+# ~15 MB que no le hacen falta a quien no genere imágenes.
+if [ "$VARIABLE" = "OPENAI_API_KEY" ]; then
+  echo "==> Instalando el paquete de imágenes"
+  ( cd "$ROOT/whatsapp-responder" && uv sync --extra imagenes ) || {
+    rojo "No se pudo instalar. Hazlo a mano:"
+    echo "    cd $ROOT/whatsapp-responder && uv sync --extra imagenes"
+  }
+fi
 
 # --- 3. La configuración del respondedor -----------------------------------
 if [ ! -f "$CONFIG" ]; then

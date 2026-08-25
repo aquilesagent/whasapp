@@ -17,6 +17,11 @@ voice = [
     "piper-tts>=1.7.0",        # hablar, con voz natural
     "imageio-ffmpeg>=0.6.0",   # ffmpeg propio: evita necesitar sudo
 ]
+# Generar imagenes. Va aparte porque es el unico proveedor que no es
+# Anthropic, con su propia clave y su propia factura:  uv sync --extra imagenes
+imagenes = [
+    "openai>=1.99",
+]
 
 [dependency-groups]
 dev = [

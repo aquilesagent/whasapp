@@ -197,6 +197,8 @@ El primer contacto de cada persona recibe tu saludo **literal**, sin pasar por
 ningún modelo.
 
 También transcribe las notas de voz que le manden, y puede responder en voz.
+Contigo además busca en internet y genera imágenes —esto último con una clave
+de OpenAI aparte, porque Claude no dibuja—.
 
 ```bash
 cd whatsapp-responder

@@ -10,12 +10,17 @@ from __future__ import annotations
 import anthropic
 from anthropic import beta_tool
 
+import imagen
 import wa
 from state import State
 
 _state: State | None = None
 _owner_name = "el jefe"
 _assistant_name = "Aquiles"
+# Chat que se esta atendiendo ahora. Lo necesita generar_imagen: la imagen no
+# cabe en el texto de una respuesta, hay que enviarla como fichero al mismo
+# chat del que vino la peticion.
+_chat_jid: str | None = None
 
 
 def configure(state: State, owner_name: str, assistant_name: str) -> None:
@@ -135,6 +140,29 @@ def listar_reuniones(limite: int = 15) -> str:
     )
 
 
+@beta_tool
+def generar_imagen(descripcion: str, forma: str = "cuadrada") -> str:
+    """Genera una imagen a partir de una descripción y la envía a este chat.
+
+    Args:
+        descripcion: Qué debe aparecer en la imagen, con detalle. En español o inglés.
+        forma: 'cuadrada', 'horizontal' o 'vertical'.
+    """
+    if _chat_jid is None:
+        return "Error interno: no sé a qué chat enviar la imagen."
+    try:
+        ruta = imagen.generar(descripcion, forma)
+    except imagen.ImagenNoDisponible as e:
+        return f"No pude generar la imagen: {e}"
+
+    ok, detail = wa.send_file(_chat_jid, ruta)
+    if not ok:
+        return f"La imagen se generó pero no se pudo enviar: {detail}"
+    # El modelo tiende a describir de nuevo lo que ya se ve; se le dice que no.
+    return ("Imagen generada y enviada al chat. Ya la está viendo: no la "
+            "describas, solo pregunta si quiere cambios.")
+
+
 TOOLS = [
     enviar_whatsapp,
     listar_chats,
@@ -156,8 +184,21 @@ BUSQUEDA_WEB = {
 }
 
 
-def herramientas(con_busqueda: bool) -> list:
-    return [*TOOLS, BUSQUEDA_WEB] if con_busqueda else list(TOOLS)
+def herramientas(con_busqueda: bool, con_imagenes: bool | None = None) -> list:
+    """La lista que ve el modelo.
+
+    generar_imagen solo aparece si de verdad se puede generar. Ofrecer una
+    herramienta que va a fallar es peor que no ofrecerla: el modelo la
+    promete, la llama, y el fallo sale en mitad de la conversacion.
+    """
+    if con_imagenes is None:
+        con_imagenes = imagen.disponible()
+    tools = list(TOOLS)
+    if con_imagenes:
+        tools.append(generar_imagen)
+    if con_busqueda:
+        tools.append(BUSQUEDA_WEB)
+    return tools
 
 
 def system_prompt() -> str:
@@ -180,13 +221,18 @@ Tienes acceso a su WhatsApp: puedes leer sus chats, buscar en su historial,
 enviar mensajes en su nombre y llevarle la agenda de reuniones. Envía mensajes
 a terceros solo cuando te lo pida explícitamente.
 
+Si tienes generar_imagen, úsala cuando te pidan una imagen, un dibujo, un
+logo o una idea visual. La imagen llega sola al chat: no describas lo que
+acabas de mandar. Si no la tienes, dilo claro: "no tengo generación de
+imágenes activada".
+
 Si tienes búsqueda web, úsala cuando la respuesta dependa de algo actual —
 precios, noticias, horarios, disponibilidad— o cuando no estés seguro. No la
 uses para lo que ya sabes. Di siempre de dónde sacaste el dato."""
 
 
 def reply(chat_jid: str, user_text: str, history_turns: int, model: str,
-          buscar_en_web: bool = False) -> str:
+          buscar_en_web: bool = False, con_imagenes: bool | None = None) -> str:
     """Procesa un mensaje del dueño y devuelve la respuesta.
 
     Persiste el turno del usuario antes de llamar a la API, para que un fallo
@@ -194,6 +240,9 @@ def reply(chat_jid: str, user_text: str, history_turns: int, model: str,
     """
     if _state is None:
         raise RuntimeError("agent.configure() no ha sido llamado")
+
+    global _chat_jid
+    _chat_jid = chat_jid
 
     _state.append_turn(chat_jid, "user", user_text)
     messages = _state.recent_turns(chat_jid, history_turns)
@@ -203,7 +252,7 @@ def reply(chat_jid: str, user_text: str, history_turns: int, model: str,
         model=model,
         max_tokens=4096,
         system=system_prompt(),
-        tools=herramientas(buscar_en_web),
+        tools=herramientas(buscar_en_web, con_imagenes),
         messages=messages,
     )
 

@@ -16,6 +16,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import imagen  # noqa: E402
 import responder  # noqa: E402
 import wa  # noqa: E402
 from state import State  # noqa: E402
@@ -40,6 +41,12 @@ CONFIG = {
 # Misma configuración pero con el agente público encendido.
 CONFIG_PUBLIC = {**CONFIG, "public": {"enabled": True, "history_turns": 10,
                                       "knowledge": "Atiende de 9 a 18."}}
+
+
+@pytest.fixture
+def sin_imagenes(monkeypatch):
+    """Que las pruebas no dependan de si hay OPENAI_API_KEY en la máquina."""
+    monkeypatch.setattr(imagen, "disponible", lambda: False)
 
 
 @pytest.fixture
@@ -662,7 +669,7 @@ def test_web_search_is_a_server_tool_with_a_cap():
         assert 1 <= t["max_uses"] <= 10
 
 
-def test_web_search_is_added_only_when_asked():
+def test_web_search_is_added_only_when_asked(sin_imagenes):
     for modulo in (responder.agent, public_agent):
         sin = modulo.herramientas(False)
         con = modulo.herramientas(True)
@@ -677,3 +684,186 @@ def test_the_public_agent_keeps_no_reading_tools_with_search_on():
     nombres = {t["name"] if isinstance(t, dict) else t.name
                for t in public_agent.herramientas(True)}
     assert nombres == {"dejar_recado", "solicitar_reunion", "web_search"}
+
+
+# --------------------------------------------------------------------------
+# Imágenes
+# --------------------------------------------------------------------------
+
+def test_the_image_tool_is_hidden_when_it_cannot_work(sin_imagenes):
+    """Ofrecer una herramienta que va a fallar es peor que no ofrecerla: el
+    modelo la promete, la llama, y el fallo sale a mitad de conversación."""
+    nombres = {t.name for t in responder.agent.herramientas(False)
+               if not isinstance(t, dict)}
+    assert "generar_imagen" not in nombres
+
+
+def test_the_image_tool_appears_when_it_can_work(monkeypatch):
+    monkeypatch.setattr(imagen, "disponible", lambda: True)
+    nombres = {t.name for t in responder.agent.herramientas(False)
+               if not isinstance(t, dict)}
+    assert "generar_imagen" in nombres
+
+
+def test_images_stay_out_of_the_public_agent(monkeypatch):
+    """Generar imágenes se factura por imagen. Un desconocido pidiéndolas en
+    bucle es una factura, así que la herramienta no existe de ese lado."""
+    monkeypatch.setattr(imagen, "disponible", lambda: True)
+    nombres = {t["name"] if isinstance(t, dict) else t.name
+               for t in public_agent.herramientas(True)}
+    assert "generar_imagen" not in nombres
+
+
+def test_config_can_turn_images_off_even_with_a_key(monkeypatch):
+    monkeypatch.setattr(imagen, "disponible", lambda: True)
+    nombres = {t.name for t in responder.agent.herramientas(False, False)
+               if not isinstance(t, dict)}
+    assert "generar_imagen" not in nombres
+
+
+def test_a_missing_key_is_reported_not_raised(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(imagen.ImagenNoDisponible) as e:
+        imagen.generar("un gato")
+    assert "OPENAI_API_KEY" in str(e.value)
+
+
+def test_the_key_never_reaches_the_error_message(monkeypatch):
+    """El error del tool vuelve al modelo y de ahí al chat. Si la clave
+    apareciera en el mensaje del proveedor, saldría por WhatsApp."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-SECRETO")
+
+    class Explota:
+        class images:
+            @staticmethod
+            def generate(**kw):
+                raise RuntimeError("401 Incorrect API key provided: sk-proj-SECRETO")
+
+        def __init__(self): pass
+
+    monkeypatch.setattr(imagen, "_cliente", lambda: Explota())
+    with pytest.raises(imagen.ImagenNoDisponible) as e:
+        imagen.generar("un gato")
+    assert "sk-proj-SECRETO" not in str(e.value)
+
+
+def test_only_the_three_known_shapes_are_used():
+    """El modelo escribe la forma libremente; si llegara tal cual a la API,
+    un valor inventado rompería la llamada."""
+    assert set(imagen.TAMANOS) == {"cuadrada", "horizontal", "vertical"}
+    for tamano in imagen.TAMANOS.values():
+        ancho, _, alto = tamano.partition("x")
+        assert ancho.isdigit() and alto.isdigit()
+
+
+def test_an_invented_shape_falls_back_instead_of_failing(monkeypatch):
+    usados = {}
+
+    class Falso:
+        class images:
+            @staticmethod
+            def generate(**kw):
+                usados.update(kw)
+                raise RuntimeError("basta, ya sé qué tamaño pidió")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-x")
+    monkeypatch.setattr(imagen, "_cliente", lambda: Falso())
+    with pytest.raises(imagen.ImagenNoDisponible):
+        imagen.generar("un gato", forma="panorámica invertida")
+    assert usados["size"] == imagen.TAMANOS["cuadrada"]
+
+
+def test_an_empty_description_never_reaches_the_provider(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-x")
+
+    def no_llamar():
+        raise AssertionError("no se debe llamar al proveedor sin descripción")
+
+    monkeypatch.setattr(imagen, "_cliente", no_llamar)
+    with pytest.raises(imagen.ImagenNoDisponible):
+        imagen.generar("   ")
+
+
+def test_a_generated_image_is_sent_as_a_file(monkeypatch, tmp_path):
+    """La imagen no cabe en el texto de la respuesta: tiene que salir como
+    fichero, y al mismo chat del que vino la petición."""
+    ruta = tmp_path / "gato.png"
+    ruta.write_bytes(b"PNG")
+    enviado = []
+
+    monkeypatch.setattr(imagen, "generar", lambda d, f="cuadrada": str(ruta))
+    monkeypatch.setattr(responder.agent.wa, "send_file",
+                        lambda dest, p: (enviado.append((dest, p)), (True, "ok"))[1])
+    monkeypatch.setattr(responder.agent, "_chat_jid", "584120000000@s.whatsapp.net")
+
+    salida = responder.agent.generar_imagen("un gato")
+    assert enviado == [("584120000000@s.whatsapp.net", str(ruta))]
+    assert "no la describas" in salida or "no la\ndescribas" in salida
+
+
+def test_a_provider_failure_comes_back_as_text_not_an_exception(monkeypatch):
+    """El tool_runner devuelve al modelo lo que retorne la herramienta. Si
+    lanzara, se caería la respuesta entera en vez de poder explicarlo."""
+    def falla(descripcion, forma="cuadrada"):
+        raise imagen.ImagenNoDisponible("el proveedor está caído")
+
+    monkeypatch.setattr(imagen, "generar", falla)
+    monkeypatch.setattr(responder.agent, "_chat_jid", "x@s.whatsapp.net")
+    salida = responder.agent.generar_imagen("un gato")
+    assert "caído" in salida
+
+
+def test_the_openai_key_is_read_from_the_same_file(tmp_path, monkeypatch):
+    env = tmp_path / "env"
+    env.write_text("ANTHROPIC_API_KEY=sk-ant-api03-REAL\n"
+                   'export OPENAI_API_KEY="sk-proj-REAL"\n', encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    assert responder.load_env_file() == str(env)
+    assert os.environ["OPENAI_API_KEY"] == "sk-proj-REAL"
+
+
+def test_the_openai_key_alone_is_not_reported_as_the_anthropic_one(tmp_path,
+                                                                  monkeypatch):
+    """--check dice 'API key: leída de X' con lo que devuelve esta función.
+    Si un fichero con solo la de OpenAI devolviera su ruta, mentiría."""
+    env = tmp_path / "env"
+    env.write_text("OPENAI_API_KEY=sk-proj-REAL\n", encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    assert responder.load_env_file() is None
+    assert os.environ["OPENAI_API_KEY"] == "sk-proj-REAL"
+
+
+def test_saving_one_key_does_not_erase_the_other(tmp_path):
+    """activar.sh guarda una clave cada vez. Reescribir el fichero entero
+    dejaría a Aquiles mudo en cuanto se guardara la de imágenes."""
+    import importlib.util
+
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "scripts", "guardar_clave.py")
+    spec = importlib.util.spec_from_file_location("guardar_clave", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    env = tmp_path / "env"
+    mod.upsert(str(env), "ANTHROPIC_API_KEY", "sk-ant-UNO")
+    mod.upsert(str(env), "OPENAI_API_KEY", "sk-proj-DOS")
+    mod.upsert(str(env), "OPENAI_API_KEY", "sk-proj-TRES")
+
+    lineas = env.read_text(encoding="utf-8").strip().splitlines()
+    assert "ANTHROPIC_API_KEY=sk-ant-UNO" in lineas
+    assert "OPENAI_API_KEY=sk-proj-TRES" in lineas
+    # Una sola línea por variable: el respondedor se queda con la primera que
+    # encuentra, así que un duplicado devolvería la clave vieja.
+    assert len(lineas) == 2
+
+    monkeyless = {}
+    for linea in lineas:
+        k, _, v = linea.partition("=")
+        monkeyless[k] = v
+    assert monkeyless["ANTHROPIC_API_KEY"] == "sk-ant-UNO"

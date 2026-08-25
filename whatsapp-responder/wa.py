@@ -223,15 +223,19 @@ def download_media(message_id: str, chat_jid: str) -> str | None:
     return body.get("path") if body.get("success") else None
 
 
-def send_audio(recipient: str, ogg_path: str) -> tuple[bool, str]:
-    """Envia una nota de voz. El fichero debe ser .ogg opus: WhatsApp solo
-    muestra la onda y el boton de reproducir con ese formato."""
-    if not os.path.isfile(ogg_path):
-        return False, f"No existe el fichero de audio: {ogg_path}"
+def send_file(recipient: str, path: str) -> tuple[bool, str]:
+    """Envia un fichero por el bridge.
+
+    El bridge decide el tipo por la extension: .png y .jpg salen como imagen,
+    .ogg como nota de voz, el resto como documento. Por eso el mismo endpoint
+    sirve para una foto y para un audio.
+    """
+    if not os.path.isfile(path):
+        return False, f"No existe el fichero: {path}"
     try:
         resp = requests.post(
             f"{API_BASE}/send",
-            json={"recipient": recipient, "media_path": ogg_path},
+            json={"recipient": recipient, "media_path": path},
             timeout=120,
         )
     except requests.RequestException as e:
@@ -243,6 +247,12 @@ def send_audio(recipient: str, ogg_path: str) -> tuple[bool, str]:
     except ValueError:
         return False, f"Respuesta no válida: {resp.text[:200]}"
     return bool(body.get("success")), str(body.get("message", ""))
+
+
+def send_audio(recipient: str, ogg_path: str) -> tuple[bool, str]:
+    """Envia una nota de voz. El fichero debe ser .ogg opus: WhatsApp solo
+    muestra la onda y el boton de reproducir con ese formato."""
+    return send_file(recipient, ogg_path)
 
 
 SESSION_DB = os.path.join(BASE_DIR, "..", "whatsapp-bridge", "store", "whatsapp.db")

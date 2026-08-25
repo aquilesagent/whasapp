@@ -21,6 +21,7 @@ import tomllib
 from datetime import datetime
 
 import agent
+import imagen
 import public_agent
 import voice
 import wa
@@ -81,8 +82,14 @@ ENV_FILES = (
 )
 
 
+# Claves que se leen del fichero. La de Anthropic es la que mueve todo; la de
+# OpenAI solo hace falta para generar imagenes, y su ausencia no impide nada
+# mas.
+CLAVES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY")
+
+
 def load_env_file() -> str | None:
-    """Carga ANTHROPIC_API_KEY de disco si no está ya en el entorno.
+    """Carga las claves de disco si no están ya en el entorno.
 
     Sin esto, que funcione depende de si la variable llegó a *esta* terminal
     concreta — y no llega si se editó .bashrc y no se reabrió la shell, o si
@@ -94,9 +101,12 @@ def load_env_file() -> str | None:
         export ANTHROPIC_API_KEY="sk-ant-..."
     La primera es la única que acepta systemd; la segunda es la que sale al
     copiar de una guía. Aquí valen ambas.
+
+    Devuelve el fichero del que salió ANTHROPIC_API_KEY, o None si ya estaba
+    en el entorno o no se encontró. Las demás claves se cargan igual, pero no
+    cambian ese valor de retorno: quien llama solo informa de esa.
     """
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return None
+    origen = None
 
     for path in ENV_FILES:
         if not os.path.isfile(path):
@@ -113,13 +123,17 @@ def load_env_file() -> str | None:
             if line.startswith("export "):
                 line = line[len("export "):].lstrip()
             name, _, value = line.partition("=")
-            if name.strip() != "ANTHROPIC_API_KEY":
+            name = name.strip()
+            if name not in CLAVES or os.environ.get(name):
                 continue
             value = value.strip().strip('"').strip("'")
-            if value:
-                os.environ["ANTHROPIC_API_KEY"] = value
-                return path
-    return None
+            if not value:
+                continue
+            os.environ[name] = value
+            if name == "ANTHROPIC_API_KEY":
+                origen = path
+
+    return origen
 
 
 def looks_like_placeholder(key: str) -> bool:
@@ -231,6 +245,9 @@ def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
             history_turns=cfg["assistant"].get("history_turns", 40),
             model=cfg["assistant"].get("model", "claude-opus-5"),
             buscar_en_web=cfg["assistant"].get("web_search", True),
+            # Dos condiciones: que el dueño lo quiera y que de verdad se pueda.
+            con_imagenes=(cfg["assistant"].get("images", True)
+                          and imagen.disponible()),
         )
     except Exception as e:  # la API puede fallar; el bucle no debe morir
         log.exception("Fallo hablando con Claude")
@@ -470,6 +487,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  ! owner.name y assistant.name son ambos "
                   f"'{cfg['owner'].get('name')}'. En owner.name va TU nombre, "
                   f"no el del asistente.")
+        print("  Imágenes:   ", end="")
+        if not cfg["assistant"].get("images", True):
+            print("desactivadas en config.toml ([assistant].images = false)")
+        elif imagen.disponible():
+            print("sí, puede generarlas (OpenAI)")
+        else:
+            print("no")
+            if not os.environ.get("OPENAI_API_KEY"):
+                print("              falta OPENAI_API_KEY. Es de "
+                      "platform.openai.com, no de Anthropic,")
+                print("              y se factura aparte. Va en la misma "
+                      "línea de ~/.config/aquiles/env:")
+                print("                OPENAI_API_KEY=sk-proj-...")
+            else:
+                print("              hay clave pero falta el paquete: "
+                      "uv sync --extra imagenes")
         print("  Voz:")
         for k, v in voice.diagnose().items():
             print(f"    {'sí' if v else 'no'}  {k}")

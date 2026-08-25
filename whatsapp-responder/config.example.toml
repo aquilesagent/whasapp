@@ -21,6 +21,11 @@ model = "claude-opus-5"
 # Lo ejecuta Anthropic: no hace falta otra clave ni otro proveedor. Se factura
 # por búsqueda, con un tope de 5 por mensaje.
 web_search = true
+# Dejar que genere imágenes cuando se las pidas. Esto NO lo hace Claude: sale
+# de OpenAI, con su propia clave (OPENAI_API_KEY) y su propia factura. Si no
+# hay clave, la herramienta ni se le ofrece y Aquiles dice que no puede.
+# Solo tú puedes pedirlas: a los terceros no se les ofrece nunca.
+images = true
 # Cuántos mensajes de vuestra conversación recuerda entre reinicios.
 history_turns = 40
 
