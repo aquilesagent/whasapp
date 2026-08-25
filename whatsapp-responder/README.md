@@ -130,27 +130,37 @@ escriba: quien manda un audio espera un audio.
 Si falta el motor de voz o falla la síntesis, manda el texto igualmente:
 quedarse callado por no tener ffmpeg sería mucho peor que sonar robótico.
 
+### Activarla
+
 ```bash
-uv sync --extra voice                      # transcripción (~400 MB)
-sudo apt install -y ffmpeg espeak-ng       # síntesis
+make voz
 ```
 
-En `config.toml`:
+Instala todo, descarga una voz española y activa `reply_with_voice`. **No
+necesita `sudo`**, y eso es deliberado: `sudo apt install ffmpeg espeak-ng` es
+el camino obvio y es justo el que no sirve cuando esto lo maneja un agente,
+porque `sudo` exige una terminal interactiva. Todo lo necesario está en pip:
 
-```toml
-[voice]
-transcribe = true
-reply_with_voice = true
-whisper_model = "base"
+| Paquete | Para qué |
+| --- | --- |
+| `faster-whisper` | Transcribe las notas de voz que llegan |
+| `piper-tts` | Sintetiza las respuestas, con voz neuronal |
+| `imageio-ffmpeg` | Trae su propio ffmpeg con libopus |
+
+Son unos 400 MB. Para elegir otra voz:
+
+```bash
+make voz VOZ=es_MX-claude-high     # hombre, México — la de mejor calidad
+make voz VOZ=es_ES-sharvard-medium # mujer, España
+make voz VOZ=es_ES-davefx-medium   # hombre, España (por defecto)
 ```
 
-`espeak-ng` suena robótico. Para voz natural instala
-[piper-tts](https://github.com/rhasspy/piper), descarga una voz española `.onnx`
-y pon su ruta en `voice.piper_voice`.
+`ffmpeg` no es opcional para enviar voz: WhatsApp solo pinta la onda y el
+botón de reproducir si el audio es `.ogg` opus. Si tienes uno del sistema se
+usa ese; si no, el de pip.
 
-`ffmpeg` no es opcional para enviar voz: WhatsApp solo pinta la onda y el botón
-de reproducir si el audio es `.ogg` opus, y ffmpeg es lo que convierte a ese
-formato.
+Si no hay piper, cae a `espeak-ng` cuando esté instalado — suena a robot de
+los noventa, pero sirve para probar.
 
 ## Cómo funciona por dentro
 
