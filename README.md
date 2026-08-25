@@ -110,6 +110,7 @@ Con el bridge corriendo, en Claude:
 ```bash
 make setup    # instala todo
 make bridge   # arranca el bridge (QR la primera vez)
+make doctor   # diagnostica qué falta o qué está fallando
 make build    # solo compila el bridge
 make check    # verifica que bridge y servidor MCP cargan
 make clean    # borra binarios y .venv (conserva la sesión de WhatsApp)
@@ -140,6 +141,23 @@ make clean    # borra binarios y .venv (conserva la sesión de WhatsApp)
 | Claude dice que no puede enviar | El bridge no está corriendo. `make bridge`. |
 | `undefined: ... sqlite3` al compilar | Falta CGO o un compilador de C. Exporta `CGO_ENABLED=1`. |
 | Dejó de conectar tras semanas | Sesión caducada: borra `whatsapp-bridge/store/` y reescanea. |
+
+Ante cualquier duda, `make doctor` revisa requisitos, build, sesión vinculada,
+mensajes sincronizados y si el bridge está escuchando, y te dice qué arreglar.
+
+## Mantenimiento
+
+El upstream se quedó atrás porque nadie notó que sus dependencias habían
+dejado de funcionar. Para que no se repita, [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)
+corre en cada push **y todos los lunes**:
+
+- compila el bridge con CGO, pasa `go vet` y comprueba que el binario arranca
+  y llega a llamar a whatsmeow;
+- carga el servidor MCP contra tres versiones del SDK (`uv.lock`, `mcp` 1.6.0
+  y la última) y verifica que las 12 herramientas siguen ahí.
+
+Si un lunes CI se pone en rojo sin que hayas tocado nada, es que una
+dependencia rompió algo — y te enteras entonces, no el día que lo necesitas.
 
 ## Licencia
 
