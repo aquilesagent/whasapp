@@ -181,6 +181,43 @@ def describe_incoming(msg: wa.Message, cfg: dict) -> str:
     return msg.content
 
 
+def send_reply(msg: wa.Message, answer: str, cfg: dict, state: State) -> None:
+    """Envía la respuesta, en voz si procede.
+
+    El criterio es simétrico: si te escriben con una nota de voz, se contesta
+    con una nota de voz. Vale igual para el dueño y para un tercero — quien
+    manda un audio espera un audio, sea quien sea.
+
+    La voz nunca es obligatoria: si falta el motor o falla la síntesis, se
+    manda el texto. Callarse porque no hay ffmpeg sería mucho peor.
+    """
+    voice_cfg = cfg.get("voice", {})
+    quiere_voz = (
+        voice_cfg.get("reply_with_voice", False)
+        and msg.media_type in voice.AUDIO_MEDIA_TYPES
+    )
+
+    if quiere_voz:
+        try:
+            os.makedirs(AUDIO_OUT_DIR, exist_ok=True)
+            out = os.path.join(AUDIO_OUT_DIR, f"{msg.id}.ogg")
+            voice.synthesize(answer, out, piper_voice=voice_cfg.get("piper_voice"))
+            ok, detail = wa.send_audio(msg.chat_jid, out)
+            if ok:
+                state.record_reply(msg.chat_jid)
+                log.info("  -> respondido con nota de voz")
+                return
+            log.warning("  -> no se pudo enviar la voz (%s), envío texto", detail)
+        except voice.VoiceUnavailable as e:
+            log.warning("  -> voz no disponible (%s), envío texto", e)
+
+    ok, detail = wa.send_message(msg.chat_jid, answer)
+    if ok:
+        state.record_reply(msg.chat_jid)
+    else:
+        log.error("  -> no se pudo responder: %s", detail)
+
+
 def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
     text = describe_incoming(msg, cfg)
     if not text.strip():
@@ -198,31 +235,7 @@ def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
         log.exception("Fallo hablando con Claude")
         answer = f"No pude procesar eso: {e}"
 
-    # Si te llegó una nota de voz y la voz está activada, se responde en voz.
-    voice_cfg = cfg.get("voice", {})
-    wants_voice = (
-        voice_cfg.get("reply_with_voice", False)
-        and msg.media_type in voice.AUDIO_MEDIA_TYPES
-    )
-    if wants_voice:
-        try:
-            os.makedirs(AUDIO_OUT_DIR, exist_ok=True)
-            out = os.path.join(AUDIO_OUT_DIR, f"{msg.id}.ogg")
-            voice.synthesize(answer, out, piper_voice=voice_cfg.get("piper_voice"))
-            ok, detail = wa.send_audio(msg.chat_jid, out)
-            if ok:
-                state.record_reply(msg.chat_jid)
-                log.info("Respondido en voz")
-                return
-            log.warning("No se pudo enviar la nota de voz (%s), envío texto", detail)
-        except voice.VoiceUnavailable as e:
-            log.warning("Voz no disponible (%s), envío texto", e)
-
-    ok, detail = wa.send_message(msg.chat_jid, answer)
-    if ok:
-        state.record_reply(msg.chat_jid)
-    else:
-        log.error("No se pudo responder al dueño: %s", detail)
+    send_reply(msg, answer, cfg, state)
 
 
 def attend_stranger(msg: wa.Message, cfg: dict, state: State,
@@ -285,12 +298,8 @@ def attend_stranger(msg: wa.Message, cfg: dict, state: State,
         answer = ("Disculpe, ahora mismo no puedo atenderle bien. "
                   "Le paso el mensaje al Sr. y le responderá.")
 
-    ok, detail = wa.send_message(msg.chat_jid, answer)
-    if ok:
-        state.record_reply(msg.chat_jid)
-        log.info("  -> atendido por el agente público")
-    else:
-        log.error("  -> no se pudo responder: %s", detail)
+    log.info("  -> atendido por el agente público")
+    send_reply(msg, answer, cfg, state)
 
 
 def handle(msg: wa.Message, cfg: dict, state: State, owner_phone: str) -> None:

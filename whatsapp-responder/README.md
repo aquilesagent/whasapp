@@ -120,8 +120,15 @@ con ningún calendario: son la libreta de Aquiles.
 
 ## Notas de voz
 
-Si te escriben con nota de voz, Aquiles la transcribe y la trata como texto.
-Opcionalmente puede responderte también en voz.
+Aquiles **escucha y contesta en voz**, y vale igual para ti que para quien te
+escriba: quien manda un audio espera un audio.
+
+- Le llega una nota de voz → la transcribe con Whisper y la trata como texto.
+- Si `reply_with_voice` está activo → contesta con otra nota de voz.
+- A un mensaje de texto le contesta con texto. La simetría es el criterio.
+
+Si falta el motor de voz o falla la síntesis, manda el texto igualmente:
+quedarse callado por no tener ffmpeg sería mucho peor que sonar robótico.
 
 ```bash
 uv sync --extra voice                      # transcripción (~400 MB)
@@ -170,7 +177,7 @@ historial ya sincronizado.
 ## Pruebas
 
 ```bash
-uv run pytest -q          # 44 pruebas
+uv run pytest -q          # 49 pruebas
 uv run responder.py --once   # procesa lo pendiente y sale
 ```
 

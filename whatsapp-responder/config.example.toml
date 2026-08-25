@@ -71,8 +71,9 @@ reply_in_groups = false
 # Transcribir las notas de voz que lleguen. Necesita faster-whisper:
 #   uv add faster-whisper
 transcribe = true
-# Responder con nota de voz cuando te escriban con nota de voz.
-# Necesita ffmpeg y un motor: piper-tts (voz natural) o espeak-ng (robótica).
+# Responder con nota de voz a quien escriba con nota de voz — tanto a ti como
+# a terceros. Necesita ffmpeg y un motor: piper-tts (voz natural) o espeak-ng
+# (robótica). Si falta alguno, se responde en texto sin más.
 reply_with_voice = false
 # tiny / base / small / medium. "base" va fino en CPU y acierta bien en español.
 whisper_model = "base"

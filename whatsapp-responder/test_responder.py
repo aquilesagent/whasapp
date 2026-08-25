@@ -518,3 +518,77 @@ def test_phone_for_lid_reads_whatsmeows_table(tmp_path, monkeypatch):
     assert wa.phone_for_lid("67495578882103@lid") == "584241983140"
     assert wa.phone_for_lid("67495578882103:3@lid") == "584241983140"
     assert wa.phone_for_lid("11111111111111@lid") is None
+
+
+# --------------------------------------------------------------------------
+# Notas de voz
+# --------------------------------------------------------------------------
+
+CONFIG_VOZ = {**CONFIG_PUBLIC,
+              "voice": {"transcribe": True, "reply_with_voice": True}}
+
+
+@pytest.fixture
+def audios(monkeypatch):
+    """Captura las notas de voz que se enviarían, sin sintetizar nada."""
+    enviados: list[tuple[str, str]] = []
+    monkeypatch.setattr(wa, "send_audio",
+                        lambda to, path: (enviados.append((to, path)),
+                                          (True, "ok"))[1])
+    monkeypatch.setattr(responder.voice, "synthesize",
+                        lambda texto, salida, **k: salida)
+    return enviados
+
+
+def voz_msg(sender: str, texto_transcrito: str) -> wa.Message:
+    return wa.Message(id=f"voz-{sender}", chat_jid=f"{sender}@s.whatsapp.net",
+                      sender=f"{sender}@s.whatsapp.net", content="",
+                      timestamp=datetime.now(), media_type="ptt")
+
+
+def test_the_owner_gets_a_voice_reply_to_a_voice_note(state, sent, audios,
+                                                      monkeypatch):
+    monkeypatch.setattr(responder, "describe_incoming", lambda m, c: "¿qué tengo hoy?")
+    monkeypatch.setattr(responder.agent, "reply", lambda chat, text, **k: "Nada, jefe.")
+    responder.handle(voz_msg(OWNER, "¿qué tengo hoy?"), CONFIG_VOZ, state, OWNER)
+    assert audios, "una nota de voz debe contestarse con una nota de voz"
+    assert not sent, "no debería haber ido también como texto"
+
+
+def test_a_stranger_also_gets_a_voice_reply(state, sent, audios, monkeypatch):
+    """Quien manda un audio espera un audio, sea quien sea."""
+    monkeypatch.setattr(responder, "describe_incoming", lambda m, c: "¿a qué hora abren?")
+    monkeypatch.setattr(responder.public_agent, "reply",
+                        lambda *a, **k: "De nueve a seis.")
+    state.mark_greeted(f"{STRANGER}@s.whatsapp.net")
+    responder.handle(voz_msg(STRANGER, "¿a qué hora abren?"), CONFIG_VOZ,
+                     state, OWNER)
+    assert audios, "el tercero también debe recibir voz"
+
+
+def test_text_messages_are_never_answered_with_voice(state, sent, audios,
+                                                     monkeypatch):
+    monkeypatch.setattr(responder.agent, "reply", lambda chat, text, **k: "Vale.")
+    responder.handle(msg(OWNER, "hola"), CONFIG_VOZ, state, OWNER)
+    assert not audios, "a texto se responde con texto"
+    assert sent
+
+
+def test_voice_failure_falls_back_to_text(state, sent, monkeypatch):
+    """Si falta ffmpeg o el motor, se manda el texto. Callarse sería peor."""
+    def sin_motor(*a, **k):
+        raise responder.voice.VoiceUnavailable("falta ffmpeg")
+    monkeypatch.setattr(responder.voice, "synthesize", sin_motor)
+    monkeypatch.setattr(responder, "describe_incoming", lambda m, c: "hola")
+    monkeypatch.setattr(responder.agent, "reply", lambda chat, text, **k: "Hola jefe.")
+    responder.handle(voz_msg(OWNER, "hola"), CONFIG_VOZ, state, OWNER)
+    assert sent and sent[-1][1] == "Hola jefe."
+
+
+def test_voice_off_means_text_even_for_a_voice_note(state, sent, audios,
+                                                    monkeypatch):
+    monkeypatch.setattr(responder, "describe_incoming", lambda m, c: "hola")
+    monkeypatch.setattr(responder.agent, "reply", lambda chat, text, **k: "Hola.")
+    responder.handle(voz_msg(OWNER, "hola"), CONFIG, state, OWNER)
+    assert not audios
+    assert sent
