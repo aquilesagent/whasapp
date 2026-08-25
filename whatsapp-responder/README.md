@@ -206,8 +206,20 @@ tomada — dueño, tercero, grupo ignorado, tope horario. Si no aparece ninguna
 línea `Entrante de ...` cuando escribes, el problema está antes: o el bridge
 no está sincronizando, o el respondedor no está vivo.
 
-**5. Falta `ANTHROPIC_API_KEY`.** En ese caso sí recibirías respuesta, pero
-diciendo que no pudo procesarlo. Silencio total apunta a los puntos anteriores.
+**5. Falta `ANTHROPIC_API_KEY`.** Sin clave no hay modelo, y por tanto no hay
+respuesta ni para ti ni para los terceros. El respondedor lo grita al arrancar
+y desactiva solo el agente público, para que a los desconocidos les llegue el
+saludo en vez de un error repetido.
+
+No es tu suscripción a Claude: es una clave aparte de
+[console.anthropic.com](https://console.anthropic.com), de pago por uso.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Para que no se pierda al cerrar la terminal, ponla en `~/.bashrc`, o en
+`~/.config/aquiles/env` si usas los servicios de systemd.
 
 **6. Un tercero solo recibió el saludo y nada más.** Comprueba
 `[public].enabled = true`. Con `false`, tras el saludo se calla.

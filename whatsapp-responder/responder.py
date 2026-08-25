@@ -348,17 +348,36 @@ def main(argv: list[str] | None = None) -> int:
                       "Aquiles apenas sabrá qué contar")
         else:
             print("  Terceros:   solo saludo fijo ([public].enabled = false)")
-        print(f"  API key:    {'presente' if os.environ.get('ANTHROPIC_API_KEY') else 'AUSENTE (exporta ANTHROPIC_API_KEY)'}")
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            print("  API key:    presente")
+        else:
+            print("  API key:    AUSENTE — SIN ESTO NO RESPONDE NADIE")
+            print("              consíguela en https://console.anthropic.com")
+            print("              (no es tu suscripción a Claude: es aparte)")
+            print("              export ANTHROPIC_API_KEY=sk-ant-...")
+        if cfg["owner"].get("name") == cfg["assistant"].get("name"):
+            print(f"  ! owner.name y assistant.name son ambos "
+                  f"'{cfg['owner'].get('name')}'. En owner.name va TU nombre, "
+                  f"no el del asistente.")
         print("  Voz:")
         for k, v in voice.diagnose().items():
             print(f"    {'sí' if v else 'no'}  {k}")
         return 0
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        log.warning(
-            "ANTHROPIC_API_KEY no está definida: el saludo a terceros funcionará, "
-            "pero la conversación contigo fallará."
-        )
+        log.error("=" * 60)
+        log.error("ANTHROPIC_API_KEY no está definida. Sin ella no hay modelo.")
+        log.error("  - Tu conversación con el asistente NO funcionará.")
+        log.error("  - Consíguela en https://console.anthropic.com (no es tu")
+        log.error("    suscripción a Claude: es una clave aparte, de pago por uso)")
+        log.error("  - Luego:  export ANTHROPIC_API_KEY=sk-ant-...")
+        log.error("=" * 60)
+        if cfg.get("public", {}).get("enabled", False):
+            # Dejarlo activo haría que cada desconocido recibiera un error de
+            # disculpa en bucle. Mejor que se queden en el saludo, que sí sale.
+            log.error("Desactivo el agente público mientras falte la clave: los "
+                      "terceros recibirán solo el saludo, en vez de un error.")
+            cfg.setdefault("public", {})["enabled"] = False
 
     return run(cfg, once=args.once, replay_minutes=args.replay_minutes)
 
