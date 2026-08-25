@@ -22,9 +22,11 @@ jobs:
           go-version-file: whatsapp-bridge/go.mod
           cache-dependency-path: whatsapp-bridge/go.sum
 
-      - name: go vet
+      - name: go vet y tests
         working-directory: whatsapp-bridge
-        run: go vet ./...
+        run: |
+          go vet ./...
+          go test ./...
 
       - name: Compilar (CGO para go-sqlite3)
         working-directory: whatsapp-bridge

@@ -19,6 +19,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mdp/qrterminal"
+	"rsc.io/qr"
 
 	"bytes"
 
@@ -835,6 +836,9 @@ func main() {
 	defer messageStore.Close()
 
 	// Setup event handling for messages and history sync
+	// Se declara antes del manejador porque este tambien lo usa.
+	connected := make(chan bool, 1)
+
 	client.AddEventHandler(func(evt interface{}) {
 		switch v := evt.(type) {
 		case *events.Message:
@@ -848,41 +852,64 @@ func main() {
 		case *events.Connected:
 			logger.Infof("Connected to WhatsApp")
 
+		case *events.PairSuccess:
+			// Unica senal de exito cuando se vincula con codigo en vez de QR.
+			select {
+			case connected <- true:
+			default:
+			}
+
 		case *events.LoggedOut:
 			logger.Warnf("Device logged out, please scan QR code to log in again")
 		}
 	})
 
-	// Create channel to track connection success
-	connected := make(chan bool, 1)
-
 	// Connect to WhatsApp
 	if client.Store.ID == nil {
-		// No ID stored, this is a new client, need to pair with phone
-		qrChan, _ := client.GetQRChannel(context.Background())
-		err = client.Connect()
-		if err != nil {
-			logger.Errorf("Failed to connect: %v", err)
-			return
-		}
-
-		// Print QR code for pairing with phone
-		for evt := range qrChan {
-			if evt.Event == "code" {
-				fmt.Println("\nScan this QR code with your WhatsApp app:")
-				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			} else if evt.Event == "success" {
-				connected <- true
-				break
+		// Sin sesion previa: hay que vincular el dispositivo.
+		if phone := strings.TrimSpace(os.Getenv("WHATSAPP_PHONE")); phone != "" {
+			// Vinculacion por codigo: no depende de que la terminal sepa
+			// dibujar un QR legible.
+			if err = client.Connect(); err != nil {
+				logger.Errorf("Failed to connect: %v", err)
+				return
 			}
+			code, pairErr := client.PairPhone(context.Background(), phone, true,
+				whatsmeow.PairClientChrome, "Chrome (Linux)")
+			if pairErr != nil {
+				logger.Errorf("No se pudo pedir el codigo de vinculacion: %v", pairErr)
+				return
+			}
+			printPairCode(phone, code)
+		} else {
+			qrChan, _ := client.GetQRChannel(context.Background())
+			if err = client.Connect(); err != nil {
+				logger.Errorf("Failed to connect: %v", err)
+				return
+			}
+			go func() {
+				for evt := range qrChan {
+					switch evt.Event {
+					case "code":
+						showQRCode(evt.Code, logger)
+					case "success":
+						select {
+						case connected <- true:
+						default:
+						}
+						return
+					}
+				}
+			}()
 		}
 
-		// Wait for connection
+		// El QR rota cada ~20s y whatsmeow emite uno nuevo cada vez, asi que
+		// el limite util es el del canal, no un temporizador corto nuestro.
 		select {
 		case <-connected:
-			fmt.Println("\nSuccessfully connected and authenticated!")
-		case <-time.After(3 * time.Minute):
-			logger.Errorf("Timeout waiting for QR code scan")
+			fmt.Println("\nVinculado correctamente.")
+		case <-time.After(10 * time.Minute):
+			logger.Errorf("Se agoto el tiempo de vinculacion. Vuelve a lanzar el bridge.")
 			return
 		}
 	} else {
@@ -1345,4 +1372,106 @@ func placeholderWaveform(duration uint32) []byte {
 	}
 
 	return waveform
+}
+
+// showQRCode muestra el QR de vinculacion por todos los caminos disponibles.
+//
+// El QR en bloques de terminal es el punto fragil: qrterminal dibuja los
+// modulos oscuros con el fondo del terminal, asi que en una terminal de fondo
+// claro sale invertido y el movil no lo reconoce. Por eso se guarda ademas un
+// PNG, que se lee siempre, y se ofrece la variante invertida.
+func showQRCode(code string, logger waLog.Logger) {
+	fmt.Println()
+	fmt.Println("=========================================================")
+	fmt.Println(" Vincula tu WhatsApp")
+	fmt.Println("=========================================================")
+	fmt.Println(" En el movil: WhatsApp -> Ajustes -> Dispositivos")
+	fmt.Println(" vinculados -> Vincular un dispositivo")
+	fmt.Println()
+
+	if path, err := writeQRPNG(code); err != nil {
+		logger.Warnf("No se pudo guardar el QR como imagen: %v", err)
+	} else {
+		fmt.Println(" Si el QR de abajo no se lee, abre esta imagen y")
+		fmt.Println(" escanea esa en su lugar:")
+		fmt.Printf("   %s\n", path)
+		fmt.Println()
+	}
+
+	qrterminal.GenerateWithConfig(code, terminalQRConfig())
+
+	fmt.Println()
+	fmt.Println(" El QR se renueva solo cada pocos segundos.")
+	fmt.Println()
+	fmt.Println(" Si no hay manera:")
+	fmt.Println("   - Terminal de fondo claro: relanza con")
+	fmt.Println("     WHATSAPP_QR_INVERT=1 make bridge")
+	fmt.Println("   - Sin QR legible: vincula con un codigo de 8 caracteres,")
+	fmt.Println("     WHATSAPP_PHONE=34600111222 make bridge")
+	fmt.Println("=========================================================")
+	fmt.Println()
+}
+
+// terminalQRConfig elige la polaridad del QR. La de qrterminal por defecto
+// solo es correcta sobre fondo oscuro; WHATSAPP_QR_INVERT la da la vuelta
+// para terminales de fondo claro.
+func terminalQRConfig() qrterminal.Config {
+	cfg := qrterminal.Config{
+		Level:      qrterminal.L,
+		Writer:     os.Stdout,
+		HalfBlocks: true,
+		QuietZone:  qrterminal.QUIET_ZONE,
+		// Modulos oscuros al fondo del terminal, claros dibujados.
+		BlackChar:      qrterminal.BLACK_BLACK,
+		BlackWhiteChar: qrterminal.BLACK_WHITE,
+		WhiteChar:      qrterminal.WHITE_WHITE,
+		WhiteBlackChar: qrterminal.WHITE_BLACK,
+	}
+	if envEnabled("WHATSAPP_QR_INVERT") {
+		cfg.BlackChar = qrterminal.WHITE_WHITE
+		cfg.BlackWhiteChar = qrterminal.WHITE_BLACK
+		cfg.WhiteChar = qrterminal.BLACK_BLACK
+		cfg.WhiteBlackChar = qrterminal.BLACK_WHITE
+	}
+	return cfg
+}
+
+// writeQRPNG guarda el QR como imagen junto a la sesion y devuelve su ruta
+// absoluta, para poder escanearlo desde un visor cuando la terminal falla.
+func writeQRPNG(code string) (string, error) {
+	c, err := qr.Encode(code, qr.L)
+	if err != nil {
+		return "", err
+	}
+	c.Scale = 8
+	path := filepath.Join("store", "qr.png")
+	if err := os.WriteFile(path, c.PNG(), 0600); err != nil {
+		return "", err
+	}
+	return filepath.Abs(path)
+}
+
+// printPairCode muestra el codigo de 8 caracteres de la vinculacion por
+// numero de telefono.
+func printPairCode(phone, code string) {
+	fmt.Println()
+	fmt.Println("=========================================================")
+	fmt.Println(" Vinculacion por codigo (sin QR)")
+	fmt.Println("=========================================================")
+	fmt.Printf(" Numero: %s\n", phone)
+	fmt.Printf(" Codigo: %s\n", code)
+	fmt.Println()
+	fmt.Println(" En el movil: WhatsApp -> Ajustes -> Dispositivos")
+	fmt.Println(" vinculados -> Vincular un dispositivo ->")
+	fmt.Println(" \"Vincular con el numero de telefono\", y teclea el codigo.")
+	fmt.Println("=========================================================")
+	fmt.Println()
+}
+
+func envEnabled(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "si", "sí":
+		return true
+	}
+	return false
 }

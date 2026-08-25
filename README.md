@@ -79,13 +79,51 @@ Con eso en pantalla, en el móvil: **WhatsApp → Ajustes → Dispositivos
 vinculados → Vincular un dispositivo**, y apunta la cámara al QR de la
 terminal.
 
-Dos detalles que hacen fallar el escaneo:
+#### Si el QR de la terminal no se lee
 
-- El QR necesita unas 40 líneas de alto. Si sale cortado o aplastado,
-  maximiza la ventana y reduce el tamaño de letra (`Ctrl -` / `Cmd -`) hasta
-  que se vea el cuadrado completo.
-- Caduca a los **3 minutos**. Si tardas verás `Timeout waiting for QR code
-  scan`; relanza `make bridge` para obtener uno nuevo.
+Es lo que más falla, y casi siempre por una de estas tres razones. Hay una
+salida para cada una:
+
+**1. Escanea la imagen en vez de la terminal.** El bridge guarda cada QR
+también como PNG y te imprime la ruta:
+
+```
+whatsapp-bridge/store/qr.png
+```
+
+Ábrelo con cualquier visor de imágenes y escanea eso. Es el camino más
+fiable: no depende de fuentes, colores ni tamaño de ventana.
+
+**2. Terminal de fondo claro → el QR sale invertido.** Los bloques se dibujan
+con el color de fondo de tu terminal, así que sobre fondo blanco los módulos
+salen al revés y el móvil no lo reconoce. Dale la vuelta:
+
+```bash
+WHATSAPP_QR_INVERT=1 make bridge
+```
+
+**3. Olvídate del QR: vincula con un código.** WhatsApp permite vincular
+tecleando un código de 8 caracteres. Pasa tu número con prefijo de país, sin
+`+` ni espacios:
+
+```bash
+WHATSAPP_PHONE=34600111222 make bridge
+```
+
+El bridge imprime algo así:
+
+```
+ Numero: 34600111222
+ Codigo: ABCD-EFGH
+```
+
+Y en el móvil: **Dispositivos vinculados → Vincular un dispositivo →
+Vincular con el número de teléfono**, y tecleas el código.
+
+**Otras dos cosas**: si el QR sale cortado, maximiza la ventana y reduce el
+tamaño de letra (`Ctrl -` / `Cmd -`) — necesita unas 40 líneas. Y el QR se
+renueva solo cada pocos segundos; el bridge espera 10 minutos antes de
+rendirse.
 
 La primera sincronización tarda un rato según tu historial. La sesión queda
 guardada en `whatsapp-bridge/store/`, así que solo escaneas una vez —
@@ -140,6 +178,13 @@ make check    # verifica que bridge y servidor MCP cargan
 make clean    # borra binarios y .venv (conserva la sesión de WhatsApp)
 ```
 
+Variables que entiende el bridge:
+
+| Variable | Efecto |
+| --- | --- |
+| `WHATSAPP_PHONE` | Vincula con código de 8 caracteres en vez de QR. Número con prefijo de país, sin `+`. |
+| `WHATSAPP_QR_INVERT` | Invierte el QR de la terminal, para fondos claros. |
+
 ## Privacidad y riesgos
 
 - **Tus mensajes se guardan sin cifrar** en `whatsapp-bridge/store/messages.db`.
@@ -161,8 +206,10 @@ make clean    # borra binarios y .venv (conserva la sesión de WhatsApp)
 | --- | --- |
 | `Failed to connect: ... Forbidden` | Sin salida a `web.whatsapp.com` (proxy/firewall/sandbox). Comprueba la red. |
 | No encuentro dónde escanear | El QR sale **en la terminal** donde corriste `make bridge`, no en web.whatsapp.com. |
+| El QR no se lee | Abre `whatsapp-bridge/store/qr.png` y escanea la imagen. |
+| El QR se ve invertido | Terminal de fondo claro: `WHATSAPP_QR_INVERT=1 make bridge`. |
+| El QR no hay manera | Salta el QR: `WHATSAPP_PHONE=34600111222 make bridge`. |
 | El QR sale cortado o deforme | Agranda la ventana y reduce el tamaño de letra hasta que quepa entero. |
-| `Timeout waiting for QR code scan` | Caducó a los 3 minutos. Relanza `make bridge`. |
 | El QR no aparece | Borra `whatsapp-bridge/store/` y vuelve a arrancar el bridge. |
 | `no such table: messages` | El bridge no ha corrido nunca o no terminó de sincronizar. |
 | Claude dice que no puede enviar | El bridge no está corriendo. `make bridge`. |
