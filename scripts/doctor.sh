@@ -53,6 +53,23 @@ else
   bad "sin base de mensajes — el bridge no ha llegado a sincronizar"
 fi
 
+echo "==> Respondedor (Aquiles)"
+if [ -f whatsapp-responder/config.toml ]; then
+  ok "configurado"
+  if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    ok "ANTHROPIC_API_KEY definida"
+  else
+    warn "sin ANTHROPIC_API_KEY — el saludo a terceros irá, la conversación contigo no"
+  fi
+else
+  warn "sin config.toml — copia whatsapp-responder/config.example.toml"
+fi
+if pgrep -f "responder.py" >/dev/null 2>&1; then
+  ok "en ejecución"
+else
+  warn "parado — arráncalo con 'make responder'"
+fi
+
 echo "==> Bridge en ejecución"
 if curl -fsS --max-time 3 -o /dev/null http://localhost:8080/api/send -X POST -d '{}' 2>/dev/null \
    || curl -sS --max-time 3 -o /dev/null -w '%{http_code}' http://localhost:8080/api/send 2>/dev/null | grep -qE '^[2-5]'; then

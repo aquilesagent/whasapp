@@ -1,0 +1,18 @@
+[Unit]
+Description=WhatsApp bridge (whatsmeow)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/whasapp/whatsapp-bridge
+ExecStart=%h/whasapp/whatsapp-bridge/bin/whatsapp-bridge
+Restart=always
+RestartSec=10
+# La sesión caduca cada ~20 días y hay que reescanear; reiniciar en bucle
+# rápido solo llenaría el log.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Install]
+WantedBy=default.target

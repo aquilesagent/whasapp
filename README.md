@@ -180,6 +180,28 @@ y reinicia la app.
 | `send_audio_message` | Envía nota de voz (`.ogg opus`, o cualquier formato si hay ffmpeg) |
 | `download_media` | Descarga el adjunto de un mensaje y devuelve la ruta |
 
+## Aquiles — el respondedor automático
+
+Además del MCP (donde tú preguntas y Claude responde), el repo trae un
+**respondedor** que atiende WhatsApp solo, por dos caminos separados:
+
+- **Cualquiera que te escriba** recibe un texto fijo de presentación. No pasa
+  por ningún modelo, así que nadie puede manipularlo con lo que escriba.
+- **Tú** conversas con Claude, que tiene herramientas para leer tus chats,
+  buscar en tu historial, enviar mensajes en tu nombre y llevarte la agenda.
+
+También transcribe las notas de voz que le manden, y puede responder en voz.
+
+```bash
+cd whatsapp-responder
+cp config.example.toml config.toml   # pon tu número en owner.phone
+export ANTHROPIC_API_KEY=sk-ant-...
+cd .. && make responder
+```
+
+Detalles completos en [`whatsapp-responder/README.md`](./whatsapp-responder/README.md).
+Para dejarlo arrancado al encender el equipo, [`systemd/README.md`](./systemd/README.md).
+
 ## Uso
 
 Con el bridge corriendo, en Claude:
@@ -194,6 +216,7 @@ Con el bridge corriendo, en Claude:
 make setup    # instala todo
 make bridge   # arranca el bridge (QR la primera vez)
 make doctor   # diagnostica qué falta o qué está fallando
+make responder # arranca Aquiles, el respondedor automático
 make build    # solo compila el bridge
 make check    # verifica que bridge y servidor MCP cargan
 make clean    # borra binarios y .venv (conserva la sesión de WhatsApp)

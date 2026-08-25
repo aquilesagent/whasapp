@@ -1,0 +1,45 @@
+# Copia este fichero a config.toml y rellena tus datos.
+# config.toml está en .gitignore: contiene tu número y no debe subirse.
+
+[owner]
+# Tu número, con prefijo de país, sin "+" ni espacios. Es el ÚNICO número que
+# habla con el modelo; todos los demás reciben el texto fijo de [greeting].
+phone = "584120000000"
+# Cómo debe llamarte el asistente.
+name = "Sr Marcos"
+
+[assistant]
+name = "Aquiles"
+model = "claude-opus-5"
+# Cuántos mensajes de vuestra conversación recuerda entre reinicios.
+history_turns = 40
+
+[greeting]
+# Respuesta FIJA a cualquiera que no seas tú. No pasa por el modelo, así que
+# nadie puede manipularla con lo que escriba.
+text = """Hola, gracias por escribir. Mi nombre es Aquiles, soy el asistente del Sr Marcos. Por favor indíqueme su nombre y en qué puedo ayudarle."""
+# No repetir el saludo al mismo contacto antes de estas horas.
+cooldown_hours = 12
+# Avisarte por WhatsApp cuando alguien nuevo escriba, con lo que dijo.
+notify_owner = true
+
+[limits]
+# Segundos entre revisiones de la base de mensajes.
+poll_seconds = 3
+# Tope de respuestas automáticas por contacto y hora (freno anti-bucle).
+max_replies_per_contact_per_hour = 6
+# Responder en grupos. Déjalo en false: un bot en un grupo es un desastre.
+reply_in_groups = false
+
+[voice]
+# Transcribir las notas de voz que lleguen. Necesita faster-whisper:
+#   uv add faster-whisper
+transcribe = true
+# Responder con nota de voz cuando te escriban con nota de voz.
+# Necesita ffmpeg y un motor: piper-tts (voz natural) o espeak-ng (robótica).
+reply_with_voice = false
+# tiny / base / small / medium. "base" va fino en CPU y acierta bien en español.
+whisper_model = "base"
+language = "es"
+# Ruta al modelo .onnx de piper. Vacío = se usa espeak-ng si está instalado.
+piper_voice = ""

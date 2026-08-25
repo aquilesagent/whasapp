@@ -43,6 +43,25 @@ jobs:
           cat run.log
           grep -q "Starting WhatsApp client" run.log
 
+  responder:
+    name: Respondedor (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias
+        working-directory: whatsapp-responder
+        # Sin --extra voice: los tests no tocan Whisper y ahorra ~400 MB.
+        run: uv sync --locked
+
+      - name: Tests
+        working-directory: whatsapp-responder
+        run: uv run pytest -q
+
   mcp-server:
     name: Servidor MCP (Python)
     runs-on: ubuntu-latest

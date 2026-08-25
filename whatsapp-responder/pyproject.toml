@@ -1,0 +1,22 @@
+[project]
+name = "whatsapp-responder"
+version = "0.1.0"
+description = "Respondedor automático de WhatsApp: texto fijo para terceros, conversación con Claude para el dueño"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.69",
+    "requests>=2.32.3",
+]
+
+# Transcribir notas de voz arrastra ~400 MB (ctranslate2 y sus dependencias),
+# asi que va aparte:  uv sync --extra voice
+[project.optional-dependencies]
+voice = [
+    "faster-whisper>=1.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

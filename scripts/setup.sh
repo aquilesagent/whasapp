@@ -67,6 +67,15 @@ echo "==> Instalando dependencias del servidor MCP"
 ( cd whatsapp-mcp-server && uv sync )
 echo "  ✓ entorno de Python listo"
 
+echo "==> Instalando dependencias del respondedor"
+( cd whatsapp-responder && uv sync )
+echo "  ✓ entorno del respondedor listo"
+if [ ! -f whatsapp-responder/config.toml ]; then
+  echo "  ! falta whatsapp-responder/config.toml — cópialo del ejemplo:"
+  echo "      cp whatsapp-responder/config.example.toml whatsapp-responder/config.toml"
+  echo "    y pon tu número en owner.phone"
+fi
+
 cat <<CONF
 
 ==> Listo.

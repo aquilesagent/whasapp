@@ -1,0 +1,10 @@
+# Contiene tu número y tu saludo: nunca al repositorio.
+config.toml
+
+# Estado del respondedor: conversaciones, reuniones, a quién se ha saludado.
+state/
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
