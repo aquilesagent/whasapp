@@ -52,6 +52,41 @@ def _cliente():
     return ElevenLabs()
 
 
+def plan(cliente) -> dict:
+    """Qué plan tiene la cuenta y cuánto le queda.
+
+    Importa por dos motivos: en el plan gratuito hay voces del catálogo que no
+    se pueden usar y conviene no ofrecerlas, y saber cuántos caracteres quedan
+    evita descubrir que se acabaron cuando Aquiles ya está mudo a media
+    conversación.
+    """
+    try:
+        s = cliente.user.subscription.get()
+    except Exception:
+        # Que no se pueda leer el plan no debe impedir elegir una voz.
+        return {"tier": None, "gratis": True, "usados": None, "limite": None}
+    tier = (getattr(s, "tier", "") or "").lower()
+    return {
+        "tier": tier or None,
+        # Solo el plan 'free' tiene restringido el catálogo; cualquier plan
+        # de pago puede usar cualquier voz.
+        "gratis": tier in ("", "free"),
+        "usados": getattr(s, "character_count", None),
+        "limite": getattr(s, "character_limit", None),
+    }
+
+
+def describir_plan(p: dict) -> str:
+    if not p.get("tier"):
+        return "plan desconocido"
+    if p.get("limite"):
+        quedan = max(0, (p["limite"] or 0) - (p["usados"] or 0))
+        # Separador de miles con punto, que es como se lee en español.
+        return (f"plan {p['tier']} — quedan {quedan:,} de {p['limite']:,} "
+                f"caracteres este mes").replace(",", ".")
+    return f"plan {p['tier']}"
+
+
 def _propias(cliente) -> list[dict]:
     """Voces que la cuenta ya tiene. Estas se pueden usar directamente."""
     try:
@@ -71,11 +106,12 @@ def _propias(cliente) -> list[dict]:
     ]
 
 
-def _catalogo(cliente, cuantas: int = 12) -> list[dict]:
+def _catalogo(cliente, cuantas: int = 12, solo_gratis: bool = True) -> list[dict]:
     """Voces españolas del catálogo público, las mejor valoradas primero.
 
-    Se filtran las que el plan gratuito no puede usar: ofrecer una voz que
-    devolvería un error de permisos no ayuda a nadie.
+    En el plan gratuito se descartan las que no se pueden usar: ofrecer una voz
+    que devolvería un error de permisos no ayuda a nadie. En un plan de pago
+    ese filtro solo escondería voces buenas, así que no se aplica.
     """
     try:
         r = cliente.voices.get_shared(language="es", page_size=cuantas * 3)
@@ -84,7 +120,7 @@ def _catalogo(cliente, cuantas: int = 12) -> list[dict]:
 
     fuera = []
     for v in (r.voices or []):
-        if getattr(v, "free_users_allowed", True) is False:
+        if solo_gratis and getattr(v, "free_users_allowed", True) is False:
             continue
         fuera.append({
             "voice_id": v.voice_id,
@@ -124,9 +160,17 @@ def _neutra_primero(voces: list[dict]) -> list[dict]:
     return sorted(voces, key=puntos)
 
 
+def _todas(cliente) -> tuple[list[dict], dict]:
+    p = plan(cliente)
+    catalogo = _catalogo(cliente, solo_gratis=p["gratis"])
+    return _neutra_primero(catalogo) + _propias(cliente), p
+
+
 def listar() -> list[dict]:
     cliente = _cliente()
-    voces = _neutra_primero(_catalogo(cliente)) + _propias(cliente)
+    voces, p = _todas(cliente)
+    print(f"ElevenLabs: {describir_plan(p)}")
+    print()
     for i, v in enumerate(voces, 1):
         marca = "ya en tu cuenta" if v["propia"] else "del catálogo"
         print(f"{i:2}. {v['name'][:44]:<44}  {v['accent'] or '?':<18} {marca}")
@@ -202,7 +246,8 @@ def _guardar_en_config(voice_id: str) -> None:
 
 def elegir(que: str | None) -> int:
     cliente = _cliente()
-    voces = _neutra_primero(_catalogo(cliente)) + _propias(cliente)
+    voces, p = _todas(cliente)
+    print(f"==> ElevenLabs: {describir_plan(p)}")
     v = _escoger(voces, que)
 
     print(f"==> Voz elegida: {v['name']}  ({v['accent'] or 'sin etiqueta'})")

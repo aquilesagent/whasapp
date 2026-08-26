@@ -250,6 +250,10 @@ Las voces del catálogo público hay que añadirlas a la cuenta antes de poder
 usarlas; `voz-real` lo hace por ti. Sin ese paso, ElevenLabs responde
 `voice_not_found`.
 
+`make voces` empieza diciendo qué plan tienes y cuántos caracteres te quedan
+este mes. El plan gratuito no puede usar parte del catálogo, así que en ese
+caso esas voces ni se listan; con un plan de pago se listan todas.
+
 **Para la voz local** (gratis y sin límite, pero sintética):
 
 ```bash
