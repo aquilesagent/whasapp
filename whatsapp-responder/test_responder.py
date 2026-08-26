@@ -1247,17 +1247,24 @@ def _activar(tmp_path, *args):
     return r, (env.read_text(encoding="utf-8") if env.exists() else "")
 
 
-def test_an_elevenlabs_key_without_a_prefix_is_recognised(tmp_path):
-    """ElevenLabs dejó de prefijar sus claves: ahora son 64 caracteres
-    hexadecimales pelados, y buscar 'sk_' hacía que no se encontrara ninguna."""
-    clave = "0123456789abcdef" * 4
-    r, env = _activar(tmp_path, clave)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert f"ELEVENLABS_API_KEY={clave}" in env
+def test_an_elevenlabs_key_id_is_refused_and_named_as_such(tmp_path):
+    """La lista de ElevenLabs solo enseña el ID; la clave se ve una vez, al
+    crearla. Guardar el ID solo aplaza el fallo hasta la primera síntesis, y
+    el error del proveedor manda a mirar la lista, que es de donde salió."""
+    r, env = _activar(tmp_path, "0123456789abcdef" * 4)
+    assert r.returncode != 0
+    assert env == ""
+    assert "ID" in r.stdout
 
 
-def test_the_provider_can_be_named_when_the_key_is_ambiguous(tmp_path):
-    clave = "abcdef01" * 4
+def test_naming_the_provider_does_not_turn_an_id_into_a_key(tmp_path):
+    r, env = _activar(tmp_path, "elevenlabs", "abcdef01" * 8)
+    assert r.returncode != 0
+    assert env == ""
+
+
+def test_a_real_elevenlabs_key_is_saved(tmp_path):
+    clave = "sk_" + "0123456789abcdef" * 3
     _, env = _activar(tmp_path, "elevenlabs", clave)
     assert f"ELEVENLABS_API_KEY={clave}" in env
 

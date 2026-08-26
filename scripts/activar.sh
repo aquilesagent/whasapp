@@ -40,8 +40,7 @@ leer_portapapeles() {
 
 # --- 1. Conseguir la clave -------------------------------------------------
 # Se puede nombrar el proveedor delante:  activar.sh elevenlabs <clave>
-# Hace falta porque ElevenLabs ya no pone prefijo a sus claves y una cadena
-# hexadecimal pelada no dice de quién es.
+# Sirve para cuando el prefijo no baste para saber de quién es.
 FORZADO=""
 case "${1:-}" in
   anthropic|claude)   FORZADO="ANTHROPIC_API_KEY";  shift ;;
@@ -60,16 +59,29 @@ fi
 if [ -z "$CLAVE" ]; then
   PEGADO="$(leer_portapapeles)"
   CLAVE="$(printf '%s' "$PEGADO" | grep -oE 'sk-(ant|proj|svcacct)-[A-Za-z0-9_-]*|sk_[A-Za-z0-9]{20,}' | head -1)"
-  # ElevenLabs entrega ahora la clave sin prefijo: 64 caracteres hexadecimales
-  # y nada mas. Solo se acepta si el portapapeles no contiene otra cosa, para
-  # no confundir un hash o un commit copiado con una clave.
+  # Si no hay clave pero si una cadena hexadecimal suelta, casi seguro es el
+  # ID de una clave de ElevenLabs copiado de la lista. Se recuerda para poder
+  # decirlo, porque el error del proveedor es criptico y manda a mirar la
+  # lista, que es justo de donde salio el ID.
   if [ -z "$CLAVE" ]; then
-    CLAVE="$(printf '%s' "$PEGADO" | tr -d '[:space:]' | grep -xE '[0-9a-fA-F]{32,64}' || true)"
+    IDPEGADO="$(printf '%s' "$PEGADO" | tr -d '[:space:]' | grep -xE '[0-9a-fA-F]{32,64}' || true)"
   fi
   ORIGEN="el portapapeles"
 fi
 
 CLAVE="$(printf '%s' "$CLAVE" | tr -d '[:space:]')"
+
+if [ -z "$CLAVE" ] && [ -n "${IDPEGADO:-}" ]; then
+  rojo "Eso es el ID de la clave, no la clave."
+  echo
+  echo "En la lista de ElevenLabs solo se ve el ID. La clave de verdad empieza"
+  echo "por 'sk_' y SOLO se muestra una vez, al crearla o al rotarla."
+  echo
+  echo "Crea una nueva en https://elevenlabs.io/app/developers/api-keys,"
+  echo "cópiala en ese momento, y pásala así:"
+  echo "    ./scripts/activar.sh elevenlabs sk_loquesea"
+  exit 1
+fi
 
 if [ -z "$CLAVE" ]; then
   rojo "No he encontrado ninguna clave."
@@ -90,26 +102,40 @@ if [ -n "$FORZADO" ]; then
   case "$VARIABLE" in
     ANTHROPIC_API_KEY)  QUIEN="Anthropic (hablar)" ;;
     OPENAI_API_KEY)     QUIEN="OpenAI (imágenes)" ;;
-    ELEVENLABS_API_KEY) QUIEN="ElevenLabs (voz realista)" ;;
+    ELEVENLABS_API_KEY)
+      QUIEN="ElevenLabs (voz realista)"
+      # Nombrar el proveedor no convierte un ID en una clave; guardarlo solo
+      # aplaza el fallo hasta la primera sintesis.
+      case "$CLAVE" in
+        sk_*) ;;
+        *) rojo "Eso no es una clave de ElevenLabs: no empieza por 'sk_'."
+           echo
+           echo "Si son 64 caracteres hexadecimales, es el ID que se ve en la"
+           echo "lista. La clave solo se muestra al crearla o al rotarla."
+           echo "Crea una nueva en https://elevenlabs.io/app/developers/api-keys"
+           exit 1 ;;
+      esac ;;
   esac
 else
   case "$CLAVE" in
     sk-ant-*)               VARIABLE="ANTHROPIC_API_KEY";  QUIEN="Anthropic (hablar)" ;;
     sk-proj-*|sk-svcacct-*) VARIABLE="OPENAI_API_KEY";     QUIEN="OpenAI (imágenes)" ;;
     sk_*)                   VARIABLE="ELEVENLABS_API_KEY"; QUIEN="ElevenLabs (voz realista)" ;;
-    # Sin prefijo y solo hexadecimal: es de ElevenLabs, que dejo de ponerlo.
-    # Ninguno de los otros dos proveedores entrega claves con esa forma.
     *)
       if printf '%s' "$CLAVE" | grep -qxE '[0-9a-fA-F]{32,64}'; then
-        VARIABLE="ELEVENLABS_API_KEY"; QUIEN="ElevenLabs (voz realista)"
+        rojo "Eso es el ID de una clave de ElevenLabs, no la clave."
+        echo
+        echo "En la lista solo se ve el ID. La clave empieza por 'sk_' y SOLO"
+        echo "se muestra una vez, al crearla o al rotarla."
+        echo "Crea una nueva en https://elevenlabs.io/app/developers/api-keys"
       else
         rojo "Eso no parece una clave de ninguno de los tres proveedores."
         echo "Encontrado en $ORIGEN: ${CLAVE:0:12}..."
         echo
-        echo "Si sabes de quién es, dilo delante:"
-        echo "    ./scripts/activar.sh elevenlabs ${CLAVE:0:8}..."
-        exit 1
-      fi ;;
+        echo "Las de Anthropic empiezan por 'sk-ant-', las de OpenAI por"
+        echo "'sk-proj-' y las de ElevenLabs por 'sk_'."
+      fi
+      exit 1 ;;
   esac
 fi
 

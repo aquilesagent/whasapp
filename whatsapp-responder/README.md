@@ -157,10 +157,11 @@ cuenta nueva empieza a cero y la primera petición se rechaza con
 suscripción a ChatGPT Plus: es otra cosa.** Si falta el saldo, Aquiles lo dice
 con esas palabras en vez de soltar el error en inglés.
 
-> **Las claves de ElevenLabs ya no llevan prefijo.** Son 64 caracteres
-> hexadecimales sin más, así que `make activar` las reconoce por su forma. Si
-> alguna vez no la detecta, dile de quién es:
-> `./scripts/activar.sh elevenlabs <clave>`.
+> **La clave de ElevenLabs solo se ve una vez.** Empieza por `sk_` y se
+> muestra en el momento de crearla o rotarla; después, la lista enseña
+> únicamente el *ID* de la clave, que son 64 caracteres hexadecimales y **no
+> sirve para autenticar**. Si se guarda el ID por error, el fallo no aparece
+> hasta la primera síntesis, así que `make activar` lo detecta y lo dice.
 
 Para activarlo, copia la clave de https://platform.openai.com/api-keys y:
 
