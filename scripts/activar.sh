@@ -39,6 +39,16 @@ leer_portapapeles() {
 }
 
 # --- 1. Conseguir la clave -------------------------------------------------
+# Se puede nombrar el proveedor delante:  activar.sh elevenlabs <clave>
+# Hace falta porque ElevenLabs ya no pone prefijo a sus claves y una cadena
+# hexadecimal pelada no dice de quién es.
+FORZADO=""
+case "${1:-}" in
+  anthropic|claude)   FORZADO="ANTHROPIC_API_KEY";  shift ;;
+  openai|imagenes)    FORZADO="OPENAI_API_KEY";     shift ;;
+  elevenlabs|voz)     FORZADO="ELEVENLABS_API_KEY"; shift ;;
+esac
+
 CLAVE="${1:-}"
 ORIGEN="el argumento"
 
@@ -48,7 +58,14 @@ if [ -z "$CLAVE" ] && [ ! -t 0 ]; then
 fi
 
 if [ -z "$CLAVE" ]; then
-  CLAVE="$(leer_portapapeles | grep -oE 'sk-(ant|proj|svcacct)-[A-Za-z0-9_-]*|sk_[A-Za-z0-9]{20,}' | head -1)"
+  PEGADO="$(leer_portapapeles)"
+  CLAVE="$(printf '%s' "$PEGADO" | grep -oE 'sk-(ant|proj|svcacct)-[A-Za-z0-9_-]*|sk_[A-Za-z0-9]{20,}' | head -1)"
+  # ElevenLabs entrega ahora la clave sin prefijo: 64 caracteres hexadecimales
+  # y nada mas. Solo se acepta si el portapapeles no contiene otra cosa, para
+  # no confundir un hash o un commit copiado con una clave.
+  if [ -z "$CLAVE" ]; then
+    CLAVE="$(printf '%s' "$PEGADO" | tr -d '[:space:]' | grep -xE '[0-9a-fA-F]{32,64}' || true)"
+  fi
   ORIGEN="el portapapeles"
 fi
 
@@ -68,17 +85,38 @@ if [ -z "$CLAVE" ]; then
   exit 1
 fi
 
-case "$CLAVE" in
-  sk-ant-*)               VARIABLE="ANTHROPIC_API_KEY"; QUIEN="Anthropic (hablar)" ;;
-  sk-proj-*|sk-svcacct-*) VARIABLE="OPENAI_API_KEY";    QUIEN="OpenAI (imágenes)" ;;
-  sk_*)                   VARIABLE="ELEVENLABS_API_KEY"; QUIEN="ElevenLabs (voz realista)" ;;
-  *) rojo "Eso no parece una clave: no empieza por 'sk-ant-', 'sk-proj-' ni 'sk_'."
-     echo "Encontrado en $ORIGEN: ${CLAVE:0:12}..."
-     exit 1 ;;
-esac
+if [ -n "$FORZADO" ]; then
+  VARIABLE="$FORZADO"
+  case "$VARIABLE" in
+    ANTHROPIC_API_KEY)  QUIEN="Anthropic (hablar)" ;;
+    OPENAI_API_KEY)     QUIEN="OpenAI (imágenes)" ;;
+    ELEVENLABS_API_KEY) QUIEN="ElevenLabs (voz realista)" ;;
+  esac
+else
+  case "$CLAVE" in
+    sk-ant-*)               VARIABLE="ANTHROPIC_API_KEY";  QUIEN="Anthropic (hablar)" ;;
+    sk-proj-*|sk-svcacct-*) VARIABLE="OPENAI_API_KEY";     QUIEN="OpenAI (imágenes)" ;;
+    sk_*)                   VARIABLE="ELEVENLABS_API_KEY"; QUIEN="ElevenLabs (voz realista)" ;;
+    # Sin prefijo y solo hexadecimal: es de ElevenLabs, que dejo de ponerlo.
+    # Ninguno de los otros dos proveedores entrega claves con esa forma.
+    *)
+      if printf '%s' "$CLAVE" | grep -qxE '[0-9a-fA-F]{32,64}'; then
+        VARIABLE="ELEVENLABS_API_KEY"; QUIEN="ElevenLabs (voz realista)"
+      else
+        rojo "Eso no parece una clave de ninguno de los tres proveedores."
+        echo "Encontrado en $ORIGEN: ${CLAVE:0:12}..."
+        echo
+        echo "Si sabes de quién es, dilo delante:"
+        echo "    ./scripts/activar.sh elevenlabs ${CLAVE:0:8}..."
+        exit 1
+      fi ;;
+  esac
+fi
 
-if [ "${#CLAVE}" -lt 40 ]; then
-  rojo "La clave es demasiado corta (${#CLAVE} caracteres); las reales pasan de 90."
+# 32 es el mínimo real: las de ElevenLabs sin prefijo tienen 64 y las de
+# Anthropic pasan de 90.
+if [ "${#CLAVE}" -lt 32 ]; then
+  rojo "La clave es demasiado corta (${#CLAVE} caracteres)."
   echo "Puede que hayas copiado solo un trozo, o el ejemplo de la documentación."
   exit 1
 fi
@@ -92,6 +130,12 @@ echo "  $VARIABLE = ${CLAVE:0:16}…${CLAVE: -4}   ${#CLAVE} caracteres"
 # El paquete de imágenes/voz solo se instala cuando hay clave para usarlo.
 # --all-extras, no --extra "$EXTRA" solo: si otro extra ya estaba instalado
 # (p.ej. voice), un sync que solo pide este lo desinstalaría.
+# Guardar la clave y parar. Lo usan las pruebas, y sirve para cambiar una
+# clave sin reinstalar paquetes ni arrancar comprobaciones.
+if [ -n "${AQUILES_SOLO_CLAVE:-}" ]; then
+  exit 0
+fi
+
 case "$VARIABLE" in
   OPENAI_API_KEY)     EXTRA=imagenes ;;
   ELEVENLABS_API_KEY) EXTRA=real ;;

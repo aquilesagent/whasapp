@@ -1226,3 +1226,53 @@ def test_the_remaining_characters_are_shown_in_plain_spanish():
         {"tier": "creator", "usados": 40000, "limite": 100000})
     assert "creator" in texto
     assert "60.000" in texto
+
+
+# --------------------------------------------------------------------------
+# activar.sh: reconocer de quién es cada clave
+# --------------------------------------------------------------------------
+
+ACTIVAR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "..", "scripts", "activar.sh")
+
+
+def _activar(tmp_path, *args):
+    """Ejecuta activar.sh con un HOME de usar y tirar y devuelve el fichero."""
+    import subprocess
+
+    entorno = dict(os.environ, HOME=str(tmp_path), AQUILES_SOLO_CLAVE="1")
+    r = subprocess.run(["bash", ACTIVAR, *args], capture_output=True,
+                       text=True, env=entorno)
+    env = tmp_path / ".config" / "aquiles" / "env"
+    return r, (env.read_text(encoding="utf-8") if env.exists() else "")
+
+
+def test_an_elevenlabs_key_without_a_prefix_is_recognised(tmp_path):
+    """ElevenLabs dejó de prefijar sus claves: ahora son 64 caracteres
+    hexadecimales pelados, y buscar 'sk_' hacía que no se encontrara ninguna."""
+    clave = "0123456789abcdef" * 4
+    r, env = _activar(tmp_path, clave)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"ELEVENLABS_API_KEY={clave}" in env
+
+
+def test_the_provider_can_be_named_when_the_key_is_ambiguous(tmp_path):
+    clave = "abcdef01" * 4
+    _, env = _activar(tmp_path, "elevenlabs", clave)
+    assert f"ELEVENLABS_API_KEY={clave}" in env
+
+
+def test_the_prefixed_keys_still_go_where_they_did(tmp_path):
+    _, env = _activar(tmp_path, "sk-ant-api03-" + "x" * 40)
+    assert "ANTHROPIC_API_KEY=sk-ant-api03-" in env
+
+    _, env = _activar(tmp_path, "sk-proj-" + "y" * 40)
+    assert "OPENAI_API_KEY=sk-proj-" in env
+    # La de Anthropic sigue ahí: guardar una no borra la otra.
+    assert "ANTHROPIC_API_KEY=sk-ant-api03-" in env
+
+
+def test_something_that_is_not_a_key_is_refused(tmp_path):
+    r, env = _activar(tmp_path, "esto-no-es-una-clave")
+    assert r.returncode != 0
+    assert env == ""
