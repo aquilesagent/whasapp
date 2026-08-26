@@ -68,7 +68,10 @@ echo "==> Instalando dependencias del servidor MCP"
 echo "  ✓ entorno de Python listo"
 
 echo "==> Instalando dependencias del respondedor"
-( cd whatsapp-responder && uv sync )
+# --all-extras: un "uv sync" con solo el grupo base desinstalaría voz/imágenes
+# si ya estaban puestas (activar.sh y voz.sh) — cada script debe converger a
+# "todo lo instalado", no a "solo lo que este script conoce".
+( cd whatsapp-responder && uv sync --all-extras )
 echo "  ✓ entorno del respondedor listo"
 if [ ! -f whatsapp-responder/config.toml ]; then
   echo "  ! falta whatsapp-responder/config.toml — cópialo del ejemplo:"

@@ -27,7 +27,9 @@ DESTINO="state/voces"
 verde() { printf '\033[32m%s\033[0m\n' "$*"; }
 
 echo "==> Instalando lo necesario (unos 400 MB, tarda un poco)"
-uv sync --extra voice
+# --all-extras, no solo --extra voice: si imagenes ya estaba instalada, un
+# sync que solo pide voice la desinstala.
+uv sync --all-extras
 verde "  ✓ faster-whisper, piper-tts y ffmpeg instalados"
 
 echo

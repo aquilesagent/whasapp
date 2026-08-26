@@ -10,12 +10,14 @@ from __future__ import annotations
 import anthropic
 from anthropic import beta_tool
 
+import buscar_imagen
 import imagen
 import wa
 from state import State
 
 _state: State | None = None
 _owner_name = "el jefe"
+_owner_address = "jefe"
 _assistant_name = "Aquiles"
 # Chat que se esta atendiendo ahora. Lo necesita generar_imagen: la imagen no
 # cabe en el texto de una respuesta, hay que enviarla como fichero al mismo
@@ -23,12 +25,19 @@ _assistant_name = "Aquiles"
 _chat_jid: str | None = None
 
 
-def configure(state: State, owner_name: str, assistant_name: str) -> None:
+def configure(state: State, owner_name: str, assistant_name: str,
+              owner_address: str | None = None) -> None:
     """Las herramientas son funciones de modulo (el decorador genera el esquema
-    a partir de la firma), asi que el estado se comparte por modulo."""
-    global _state, _owner_name, _assistant_name
+    a partir de la firma), asi que el estado se comparte por modulo.
+
+    owner_address es como se dirige a el (p.ej. "jefe"); owner_name es su
+    nombre real, que el modelo conoce pero no usa para hablarle. Si no se
+    especifica, se dirige a el por su nombre (comportamiento anterior).
+    """
+    global _state, _owner_name, _owner_address, _assistant_name
     _state = state
     _owner_name = owner_name
+    _owner_address = owner_address or owner_name
     _assistant_name = assistant_name
 
 
@@ -163,6 +172,29 @@ def generar_imagen(descripcion: str, forma: str = "cuadrada") -> str:
             "describas, solo pregunta si quiere cambios.")
 
 
+@beta_tool
+def buscar_imagen_real(consulta: str) -> str:
+    """Busca una foto real que ya existe en internet (Google) y la envía a
+    este chat. Úsala cuando pidan una foto real de algo concreto, no un
+    dibujo o una imagen inventada — para eso está generar_imagen.
+
+    Args:
+        consulta: Qué buscar, como lo escribirías en el buscador de Google.
+    """
+    if _chat_jid is None:
+        return "Error interno: no sé a qué chat enviar la imagen."
+    try:
+        ruta = buscar_imagen.buscar(consulta)
+    except buscar_imagen.BusquedaNoDisponible as e:
+        return f"No pude buscar la imagen: {e}"
+
+    ok, detail = wa.send_file(_chat_jid, ruta)
+    if not ok:
+        return f"Encontré la imagen pero no se pudo enviar: {detail}"
+    return ("Imagen encontrada y enviada al chat. Ya la está viendo: no la "
+            "describas, solo pregunta si quiere otra.")
+
+
 TOOLS = [
     enviar_whatsapp,
     listar_chats,
@@ -184,18 +216,23 @@ BUSQUEDA_WEB = {
 }
 
 
-def herramientas(con_busqueda: bool, con_imagenes: bool | None = None) -> list:
+def herramientas(con_busqueda: bool, con_imagenes: bool | None = None,
+                  con_busqueda_imagen: bool | None = None) -> list:
     """La lista que ve el modelo.
 
-    generar_imagen solo aparece si de verdad se puede generar. Ofrecer una
-    herramienta que va a fallar es peor que no ofrecerla: el modelo la
-    promete, la llama, y el fallo sale en mitad de la conversacion.
+    generar_imagen y buscar_imagen_real solo aparecen si de verdad se pueden
+    usar. Ofrecer una herramienta que va a fallar es peor que no ofrecerla: el
+    modelo la promete, la llama, y el fallo sale en mitad de la conversacion.
     """
     if con_imagenes is None:
         con_imagenes = imagen.disponible()
+    if con_busqueda_imagen is None:
+        con_busqueda_imagen = buscar_imagen.disponible()
     tools = list(TOOLS)
     if con_imagenes:
         tools.append(generar_imagen)
+    if con_busqueda_imagen:
+        tools.append(buscar_imagen_real)
     if con_busqueda:
         tools.append(BUSQUEDA_WEB)
     return tools
@@ -204,8 +241,10 @@ def herramientas(con_busqueda: bool, con_imagenes: bool | None = None) -> list:
 def system_prompt() -> str:
     return f"""Eres {_assistant_name}, el asistente personal de {_owner_name}.
 
-Hablas con {_owner_name} por WhatsApp. Él es la única persona con la que
-conversas: los desconocidos reciben un saludo fijo que tú no generas.
+Hablas con él por WhatsApp. Es la única persona con la que conversas: los
+desconocidos reciben un saludo fijo que tú no generas. Sabes que se llama
+{_owner_name}, pero te diriges a él como "{_owner_address}" — nunca lo llames
+por su nombre.
 
 Cómo responder:
 - Estás en WhatsApp. Sé breve y directo. Nada de markdown, listas con viñetas
@@ -215,16 +254,21 @@ Cómo responder:
 - Si te falta un dato imprescindible (a qué número enviar, qué día es la
   reunión), pregúntalo en una sola frase.
 - Si una herramienta falla, di qué falló en lenguaje llano. No lo disimules.
-- Trátalo de usted y llámalo {_owner_name}.
+- Trátalo de usted y llámalo {_owner_address}, nunca por su nombre.
 
 Tienes acceso a su WhatsApp: puedes leer sus chats, buscar en su historial,
 enviar mensajes en su nombre y llevarle la agenda de reuniones. Envía mensajes
 a terceros solo cuando te lo pida explícitamente.
 
 Si tienes generar_imagen, úsala cuando te pidan una imagen, un dibujo, un
-logo o una idea visual. La imagen llega sola al chat: no describas lo que
-acabas de mandar. Si no la tienes, dilo claro: "no tengo generación de
-imágenes activada".
+logo o una idea visual que no existe todavía. Si tienes buscar_imagen_real,
+úsala cuando pidan una foto real de algo concreto (una persona, un lugar, un
+animal, un producto) en vez de algo inventado. Ante la duda de cuál usar,
+pregunta o usa la de búsqueda: casi siempre "una foto de X" pide algo real.
+La imagen llega sola al chat en ambos casos: no describas lo que acabas de
+mandar. Si no tienes la que hace falta, dilo claro: "no tengo generación de
+imágenes activada" o "no tengo búsqueda de imágenes activada", según cuál
+falte.
 
 Si tienes búsqueda web, úsala cuando la respuesta dependa de algo actual —
 precios, noticias, horarios, disponibilidad— o cuando no estés seguro. No la
@@ -232,7 +276,8 @@ uses para lo que ya sabes. Di siempre de dónde sacaste el dato."""
 
 
 def reply(chat_jid: str, user_text: str, history_turns: int, model: str,
-          buscar_en_web: bool = False, con_imagenes: bool | None = None) -> str:
+          buscar_en_web: bool = False, con_imagenes: bool | None = None,
+          con_busqueda_imagen: bool | None = None) -> str:
     """Procesa un mensaje del dueño y devuelve la respuesta.
 
     Persiste el turno del usuario antes de llamar a la API, para que un fallo
@@ -252,7 +297,7 @@ def reply(chat_jid: str, user_text: str, history_turns: int, model: str,
         model=model,
         max_tokens=4096,
         system=system_prompt(),
-        tools=herramientas(buscar_en_web, con_imagenes),
+        tools=herramientas(buscar_en_web, con_imagenes, con_busqueda_imagen),
         messages=messages,
     )
 

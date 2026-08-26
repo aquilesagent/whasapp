@@ -16,6 +16,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import buscar_imagen  # noqa: E402
 import imagen  # noqa: E402
 import responder  # noqa: E402
 import voces  # noqa: E402
@@ -49,6 +50,12 @@ CONFIG_PUBLIC = {**CONFIG, "public": {"enabled": True, "history_turns": 10,
 def sin_imagenes(monkeypatch):
     """Que las pruebas no dependan de si hay OPENAI_API_KEY en la máquina."""
     monkeypatch.setattr(imagen, "disponible", lambda: False)
+
+
+@pytest.fixture
+def sin_busqueda_imagen(monkeypatch):
+    """Que las pruebas no dependan de si hay GOOGLE_API_KEY/GOOGLE_CX."""
+    monkeypatch.setattr(buscar_imagen, "disponible", lambda: False)
 
 
 @pytest.fixture
@@ -747,6 +754,79 @@ def test_the_key_never_reaches_the_error_message(monkeypatch):
     with pytest.raises(imagen.ImagenNoDisponible) as e:
         imagen.generar("un gato")
     assert "sk-proj-SECRETO" not in str(e.value)
+
+
+# --------------------------------------------------------------------------
+# Búsqueda de imagen real (Google)
+# --------------------------------------------------------------------------
+
+def test_the_search_image_tool_is_hidden_when_it_cannot_work(sin_imagenes,
+                                                               sin_busqueda_imagen):
+    nombres = {t.name for t in responder.agent.herramientas(False)
+               if not isinstance(t, dict)}
+    assert "buscar_imagen_real" not in nombres
+
+
+def test_the_search_image_tool_appears_when_it_can_work(sin_imagenes, monkeypatch):
+    monkeypatch.setattr(buscar_imagen, "disponible", lambda: True)
+    nombres = {t.name for t in responder.agent.herramientas(False)
+               if not isinstance(t, dict)}
+    assert "buscar_imagen_real" in nombres
+
+
+def test_image_search_stays_out_of_the_public_agent(monkeypatch):
+    """Igual que generar_imagen: cada búsqueda se factura, y un desconocido
+    pidiéndolas en bucle es una factura para el dueño."""
+    monkeypatch.setattr(buscar_imagen, "disponible", lambda: True)
+    nombres = {t["name"] if isinstance(t, dict) else t.name
+               for t in public_agent.herramientas(True)}
+    assert "buscar_imagen_real" not in nombres
+
+
+def test_config_can_turn_image_search_off_even_with_keys(sin_imagenes, monkeypatch):
+    monkeypatch.setattr(buscar_imagen, "disponible", lambda: True)
+    nombres = {t.name for t in responder.agent.herramientas(False, con_busqueda_imagen=False)
+               if not isinstance(t, dict)}
+    assert "buscar_imagen_real" not in nombres
+
+
+def test_missing_google_keys_are_reported_not_raised(monkeypatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_CX", raising=False)
+    with pytest.raises(buscar_imagen.BusquedaNoDisponible) as e:
+        buscar_imagen.buscar("un gato")
+    assert "GOOGLE_API_KEY" in str(e.value)
+
+
+def test_the_google_key_never_reaches_the_error_message(monkeypatch):
+    """El error del tool vuelve al modelo y de ahí al chat. Si la clave
+    apareciera en el mensaje de Google, saldría por WhatsApp."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSECRETOSECRETOSECRETO")
+    monkeypatch.setenv("GOOGLE_CX", "017576662512468239146:omuauf_lfve")
+
+    class Respuesta:
+        status_code = 403
+        text = ('{"error": {"message": "API key not valid: '
+                'AIzaSECRETOSECRETOSECRETO"}}')
+
+    monkeypatch.setattr(buscar_imagen.requests, "get", lambda *a, **k: Respuesta())
+    with pytest.raises(buscar_imagen.BusquedaNoDisponible) as e:
+        buscar_imagen.buscar("un gato")
+    assert "AIzaSECRETOSECRETOSECRETO" not in str(e.value)
+
+
+def test_search_image_sends_a_file_not_text(monkeypatch, tmp_path):
+    """Igual que la imagen generada: no cabe en el texto de la respuesta."""
+    ruta = tmp_path / "foto.jpg"
+    ruta.write_bytes(b"fake")
+    monkeypatch.setattr(buscar_imagen, "buscar", lambda q: str(ruta))
+    enviados = []
+    monkeypatch.setattr(responder.agent.wa, "send_file",
+                        lambda chat, path: (enviados.append((chat, path)), (True, "ok"))[1])
+    responder.agent._chat_jid = "584241983140@s.whatsapp.net"
+    salida = responder.agent.buscar_imagen_real("un gato real")
+    assert enviados == [("584241983140@s.whatsapp.net", str(ruta))]
+    assert "no la describas" in salida.lower()
 
 
 def test_only_the_three_known_shapes_are_used():

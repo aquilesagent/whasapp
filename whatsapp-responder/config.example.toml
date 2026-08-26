@@ -11,8 +11,11 @@
 # lo detecta y se niega a arrancar, pero mejor no llegar ahí.
 # Para ver cuál es cuál:  uv run responder.py --check
 phone = "584120000000"
-# Cómo debe llamarte el asistente.
+# Tu nombre real. Aquiles lo conoce pero no te llama por él.
 name = "Sr Marcos"
+# Cómo se dirige a ti al hablarte, en vez de tu nombre. Opcional: si se omite,
+# te llama por tu nombre (name), como antes.
+# address = "jefe"
 
 [assistant]
 name = "Aquiles"
@@ -26,6 +29,16 @@ web_search = true
 # hay clave, la herramienta ni se le ofrece y Aquiles dice que no puede.
 # Solo tú puedes pedirlas: a los terceros no se les ofrece nunca.
 images = true
+# Dejar que busque fotos reales en Google cuando pidas "una foto de X" en vez
+# de un dibujo. Tampoco lo hace Claude: es la Custom Search JSON API de
+# Google, gratis hasta 100 búsquedas al día (sin tarjeta), de pago después.
+# Hacen falta dos valores en ~/.config/aquiles/env:
+#   GOOGLE_API_KEY  de https://console.cloud.google.com/apis/credentials
+#                   (con la "Custom Search API" habilitada)
+#   GOOGLE_CX       ID de un motor en https://programmablesearchengine.google.com/
+#                   con "Búsqueda de imágenes" y "Buscar en toda la web" activadas
+# Si faltan, la herramienta ni se ofrece y Aquiles dice que no puede.
+search_images = true
 # Cuántos mensajes de vuestra conversación recuerda entre reinicios.
 history_turns = 40
 

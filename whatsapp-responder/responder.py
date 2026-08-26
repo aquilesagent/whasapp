@@ -21,6 +21,7 @@ import tomllib
 from datetime import datetime
 
 import agent
+import buscar_imagen
 import imagen
 import public_agent
 import voice
@@ -83,9 +84,11 @@ ENV_FILES = (
 
 
 # Claves que se leen del fichero. La de Anthropic es la que mueve todo; las
-# otras dos son opcionales y cada una habilita una sola cosa: OpenAI las
-# imagenes, ElevenLabs la voz realista. Sin ellas el resto sigue igual.
-CLAVES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY")
+# demas son opcionales y cada una habilita una sola cosa: OpenAI genera
+# imagenes, ElevenLabs da voz realista, Google busca fotos reales. Sin ellas
+# el resto sigue igual.
+CLAVES = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY",
+          "GOOGLE_API_KEY", "GOOGLE_CX")
 
 
 def load_env_file() -> str | None:
@@ -254,6 +257,8 @@ def reply_to_owner(msg: wa.Message, cfg: dict, state: State) -> None:
             # Dos condiciones: que el dueño lo quiera y que de verdad se pueda.
             con_imagenes=(cfg["assistant"].get("images", True)
                           and imagen.disponible()),
+            con_busqueda_imagen=(cfg["assistant"].get("search_images", True)
+                                  and buscar_imagen.disponible()),
         )
     except Exception as e:  # la API puede fallar; el bucle no debe morir
         log.exception("Fallo hablando con Claude")
@@ -363,6 +368,7 @@ def run(cfg: dict, once: bool = False, replay_minutes: int | None = None) -> int
         state,
         owner_name=cfg["owner"].get("name", "el jefe"),
         assistant_name=cfg["assistant"].get("name", "Aquiles"),
+        owner_address=cfg["owner"].get("address"),
     )
     public_agent.configure(
         state,
@@ -509,6 +515,14 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print("              hay clave pero falta el paquete: "
                       "uv sync --extra imagenes")
+        print("  Búsqueda de imagen (Google):", end=" ")
+        if not cfg["assistant"].get("search_images", True):
+            print("desactivada en config.toml ([assistant].search_images = false)")
+        elif buscar_imagen.disponible():
+            print("sí")
+        else:
+            print("no — faltan GOOGLE_API_KEY y/o GOOGLE_CX en "
+                  "~/.config/aquiles/env")
         print("  Voz:")
         for k, v in voice.diagnose().items():
             print(f"    {'sí' if v else 'no'}  {k}")

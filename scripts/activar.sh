@@ -89,8 +89,9 @@ python3 "$ROOT/scripts/guardar_clave.py" "$ENV_FILE" "$VARIABLE" "$CLAVE" || exi
 verde "✓ Clave de $QUIEN guardada en $ENV_FILE (desde $ORIGEN)"
 echo "  $VARIABLE = ${CLAVE:0:16}…${CLAVE: -4}   ${#CLAVE} caracteres"
 
-# El paquete de imágenes solo se instala cuando hay clave para usarlo: son
-# ~15 MB que no le hacen falta a quien no genere imágenes.
+# El paquete de imágenes/voz solo se instala cuando hay clave para usarlo.
+# --all-extras, no --extra "$EXTRA" solo: si otro extra ya estaba instalado
+# (p.ej. voice), un sync que solo pide este lo desinstalaría.
 case "$VARIABLE" in
   OPENAI_API_KEY)     EXTRA=imagenes ;;
   ELEVENLABS_API_KEY) EXTRA=real ;;
@@ -98,9 +99,9 @@ case "$VARIABLE" in
 esac
 if [ -n "$EXTRA" ]; then
   echo "==> Instalando el paquete '$EXTRA'"
-  ( cd "$ROOT/whatsapp-responder" && uv sync --extra "$EXTRA" ) || {
+  ( cd "$ROOT/whatsapp-responder" && uv sync --all-extras ) || {
     rojo "No se pudo instalar. Hazlo a mano:"
-    echo "    cd $ROOT/whatsapp-responder && uv sync --extra $EXTRA"
+    echo "    cd $ROOT/whatsapp-responder && uv sync --all-extras"
   }
 fi
 if [ "$VARIABLE" = "ELEVENLABS_API_KEY" ]; then
