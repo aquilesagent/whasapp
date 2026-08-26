@@ -1,0 +1,17 @@
+[Unit]
+Description=Respondedor automático de WhatsApp (Aquiles)
+After=whatsapp-bridge.service
+Requires=whatsapp-bridge.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/whasapp/whatsapp-responder
+ExecStart=%h/.local/bin/uv run responder.py
+Restart=always
+RestartSec=10
+# La clave de la API. Guárdala en ~/.config/aquiles/env con:
+#   ANTHROPIC_API_KEY=sk-ant-...
+EnvironmentFile=%h/.config/aquiles/env
+
+[Install]
+WantedBy=default.target

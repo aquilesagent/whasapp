@@ -1,0 +1,125 @@
+# Copia este fichero a config.toml y rellena tus datos.
+# config.toml está en .gitignore: contiene tu número y no debe subirse.
+
+[owner]
+# TU número — el del teléfono desde el que le escribes a Aquiles.
+# Con prefijo de país, sin "+" ni espacios.
+#
+# OJO: NO es el número al que está vinculado el bridge (ese es el de Aquiles).
+# Son dos teléfonos distintos. Si pones aquí el del asistente, tus mensajes
+# nunca se reconocerán como tuyos y Aquiles no te contestará. El respondedor
+# lo detecta y se niega a arrancar, pero mejor no llegar ahí.
+# Para ver cuál es cuál:  uv run responder.py --check
+phone = "584120000000"
+# Tu nombre real. Aquiles lo conoce pero no te llama por él.
+name = "Sr Marcos"
+# Cómo se dirige a ti al hablarte, en vez de tu nombre. Opcional: si se omite,
+# te llama por tu nombre (name), como antes.
+# address = "jefe"
+
+[assistant]
+name = "Aquiles"
+model = "claude-opus-5"
+# Dejar que busque en internet cuando la respuesta dependa de algo actual.
+# Lo ejecuta Anthropic: no hace falta otra clave ni otro proveedor. Se factura
+# por búsqueda, con un tope de 5 por mensaje.
+web_search = true
+# Dejar que genere imágenes cuando se las pidas. Esto NO lo hace Claude: sale
+# de OpenAI, con su propia clave (OPENAI_API_KEY) y su propia factura. Si no
+# hay clave, la herramienta ni se le ofrece y Aquiles dice que no puede.
+# Solo tú puedes pedirlas: a los terceros no se les ofrece nunca.
+images = true
+# Dejar que busque fotos reales en Google cuando pidas "una foto de X" en vez
+# de un dibujo. Tampoco lo hace Claude: es la Custom Search JSON API de
+# Google, gratis hasta 100 búsquedas al día (sin tarjeta), de pago después.
+# Hacen falta dos valores en ~/.config/aquiles/env:
+#   GOOGLE_API_KEY  de https://console.cloud.google.com/apis/credentials
+#                   (con la "Custom Search API" habilitada)
+#   GOOGLE_CX       ID de un motor en https://programmablesearchengine.google.com/
+#                   con "Búsqueda de imágenes" y "Buscar en toda la web" activadas
+# Si faltan, la herramienta ni se ofrece y Aquiles dice que no puede.
+search_images = true
+# Cuántos mensajes de vuestra conversación recuerda entre reinicios.
+history_turns = 40
+
+# ---------------------------------------------------------------------------
+# Aquiles atendiendo a terceros
+# ---------------------------------------------------------------------------
+[public]
+# true  = conversa con cualquiera que le escriba, usando lo de [public.knowledge]
+# false = a los terceros solo les manda el saludo fijo y nada más
+enabled = true
+
+# Cuántos turnos recuerda de la conversación con cada contacto.
+history_turns = 20
+
+# Dejar que busque en internet al atender a terceros. APAGADO por defecto:
+# cada búsqueda se factura y un desconocido puede pedir todas las que quiera.
+web_search = false
+
+# Modelo para atender terceros. Si lo omites usa el de [assistant].
+# Aquí sí tiene sentido uno más barato: son conversaciones sencillas.
+# model = "claude-sonnet-5"
+
+# LO QUE SABE CONTAR. Esto es lo que Aquiles puede responder por su cuenta;
+# aquí es donde lo vas educando. Escríbelo como se lo explicarías a un
+# empleado nuevo. Si le preguntan algo que no está aquí, no se lo inventa:
+# lo dice y ofrece dejarle un recado al jefe.
+knowledge = """
+El Sr Marcos atiende consultas de lunes a viernes, de 9 a 18, hora de Caracas.
+
+Para reunirse con él hay que pedir cita: pregunta nombre, día, hora y motivo,
+y usa solicitar_reunion. La confirma él, nunca tú.
+
+(Añade aquí lo tuyo: a qué se dedica, qué servicios ofrece, precios que sí se
+pueden decir, dónde está, qué NO debe contarse. Cuanto más concreto, mejor
+atiende.)
+"""
+
+[greeting]
+# Respuesta FIJA a cualquiera que no seas tú. No pasa por el modelo, así que
+# nadie puede manipularla con lo que escriba.
+text = """Hola, gracias por escribir. Mi nombre es Aquiles, soy el asistente del Sr Marcos. Por favor indíqueme su nombre y en qué puedo ayudarle."""
+# No repetir el saludo al mismo contacto antes de estas horas.
+cooldown_hours = 12
+# Avisarte por WhatsApp cuando alguien nuevo escriba, con lo que dijo.
+notify_owner = true
+
+[limits]
+# Segundos entre revisiones de la base de mensajes.
+poll_seconds = 3
+# Tope de respuestas automáticas por contacto y hora (freno anti-bucle).
+max_replies_per_contact_per_hour = 6
+# Responder en grupos. Déjalo en false: un bot en un grupo es un desastre.
+reply_in_groups = false
+
+[voice]
+# Transcribir las notas de voz que lleguen. Necesita faster-whisper:
+#   uv add faster-whisper
+transcribe = true
+# Responder con nota de voz a quien escriba con nota de voz — tanto a ti como
+# a terceros. Necesita ffmpeg y un motor: piper-tts (voz natural) o espeak-ng
+# (robótica). Si falta alguno, se responde en texto sin más.
+reply_with_voice = false
+# tiny / base / small / medium. "base" va fino en CPU y acierta bien en español.
+whisper_model = "base"
+language = "es"
+
+# --- Qué voz usa Aquiles ---------------------------------------------------
+# Hay tres motores, de más a menos realista, y se cae al siguiente en cuanto
+# uno falla. Que ElevenLabs se quede sin créditos no debe dejarlo mudo.
+#
+# 1. ElevenLabs — indistinguible de una persona. Necesita ELEVENLABS_API_KEY
+#    (plan gratuito: 10.000 caracteres al mes). Pon aquí el ID de la voz:
+#      make voces        lista las que tienes y sus IDs
+#      make voz-real     te deja una elegida y probada
+elevenlabs_voice = ""
+# eleven_multilingual_v2 es el más realista en español. eleven_flash_v2_5
+# gasta la mitad de créditos y suena algo peor.
+elevenlabs_model = "eleven_multilingual_v2"
+#
+# 2. piper — local, sin clave y sin límite, pero se nota que es sintética.
+#    Ruta al modelo .onnx. Vacío = se usa el que haya descargado `make voz`.
+piper_voice = ""
+#
+# 3. espeak-ng — el último recurso, claramente robótico.

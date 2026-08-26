@@ -1,0 +1,34 @@
+[project]
+name = "whatsapp-responder"
+version = "0.1.0"
+description = "Respondedor automático de WhatsApp: texto fijo para terceros, conversación con Claude para el dueño"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.69",
+    "requests>=2.32.3",
+]
+
+# Transcribir notas de voz arrastra ~400 MB (ctranslate2 y sus dependencias),
+# asi que va aparte:  uv sync --extra voice
+[project.optional-dependencies]
+voice = [
+    "faster-whisper>=1.2.1",   # escuchar
+    "piper-tts>=1.7.0",        # hablar, con voz natural
+    "imageio-ffmpeg>=0.6.0",   # ffmpeg propio: evita necesitar sudo
+]
+# Generar imagenes. Va aparte porque es el unico proveedor que no es
+# Anthropic, con su propia clave y su propia factura:  uv sync --extra imagenes
+imagenes = [
+    "openai>=1.99",
+]
+# La voz realista de ElevenLabs. Aparte porque tiene su propia clave y su
+# propio plan:  uv sync --extra real
+real = [
+    "elevenlabs>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

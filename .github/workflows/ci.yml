@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # El upstream murió por dependencias podridas, no por un commit malo.
+  # Esta ejecución semanal detecta la ruptura cuando pasa, no cuando la sufres.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  bridge:
+    name: Bridge (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: whatsapp-bridge/go.mod
+          cache-dependency-path: whatsapp-bridge/go.sum
+
+      - name: go vet y tests
+        working-directory: whatsapp-bridge
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Compilar (CGO para go-sqlite3)
+        working-directory: whatsapp-bridge
+        env:
+          CGO_ENABLED: 1
+        run: go build -o bin/whatsapp-bridge .
+
+      - name: El binario arranca e intenta conectar
+        working-directory: whatsapp-bridge
+        run: |
+          # Sin credenciales no llega a vincularse, pero sí prueba que el
+          # binario corre, abre el SQLite y llama a whatsmeow.
+          timeout 25 ./bin/whatsapp-bridge > run.log 2>&1 || true
+          cat run.log
+          grep -q "Starting WhatsApp client" run.log
+
+  responder:
+    name: Respondedor (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias
+        working-directory: whatsapp-responder
+        # Sin --extra voice: los tests no tocan Whisper y ahorra ~400 MB.
+        run: uv sync --locked
+
+      - name: Tests
+        working-directory: whatsapp-responder
+        run: uv run pytest -q
+
+  mcp-server:
+    name: Servidor MCP (Python)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # main.py debe funcionar con el SDK viejo y con el nuevo.
+        mcp-version: ["locked", "1.6.0", "latest"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias (${{ matrix.mcp-version }})
+        working-directory: whatsapp-mcp-server
+        run: |
+          case "${{ matrix.mcp-version }}" in
+            locked) uv sync --locked ;;
+            latest) uv sync --upgrade ;;
+            *)      uv sync && uv pip install "mcp[cli]==${{ matrix.mcp-version }}" ;;
+          esac
+
+      - name: Cargar el servidor y comprobar las 12 herramientas
+        working-directory: whatsapp-mcp-server
+        run: uv run python ../.github/scripts/check_tools.py
