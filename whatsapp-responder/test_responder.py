@@ -1276,3 +1276,26 @@ def test_something_that_is_not_a_key_is_refused(tmp_path):
     r, env = _activar(tmp_path, "esto-no-es-una-clave")
     assert r.returncode != 0
     assert env == ""
+
+
+def test_choosing_a_voice_reads_the_key_from_disk(tmp_path, monkeypatch):
+    """El respondedor carga ~/.config/aquiles/env al arrancar, pero voces.py
+    es otro programa. Sin cargarlo, 'make voz-real' decía que faltaba la clave
+    mientras '--check' la daba por presente: dos respuestas para lo mismo."""
+    env = tmp_path / "env"
+    env.write_text("ELEVENLABS_API_KEY=sk_DE_DISCO\n", encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+
+    voces._cargar_clave()
+    assert os.environ["ELEVENLABS_API_KEY"] == "sk_DE_DISCO"
+
+
+def test_a_key_already_in_the_environment_is_left_alone(tmp_path, monkeypatch):
+    env = tmp_path / "env"
+    env.write_text("ELEVENLABS_API_KEY=de-disco\n", encoding="utf-8")
+    monkeypatch.setattr(responder, "ENV_FILES", (str(env),))
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "del-entorno")
+
+    voces._cargar_clave()
+    assert os.environ["ELEVENLABS_API_KEY"] == "del-entorno"

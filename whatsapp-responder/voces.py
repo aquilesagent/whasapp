@@ -35,13 +35,32 @@ class SinClave(RuntimeError):
     pass
 
 
+def _cargar_clave() -> None:
+    """Trae las claves de ~/.config/aquiles/env al entorno de este proceso.
+
+    El respondedor lo hace al arrancar, pero esto es otro programa: sin esto,
+    'make voz-real' decia que faltaba la clave mientras 'responder.py --check'
+    —que si carga el fichero— la daba por presente. Dos respuestas distintas
+    para la misma clave.
+    """
+    if os.environ.get("ELEVENLABS_API_KEY"):
+        return
+    try:
+        import responder
+        responder.load_env_file()
+    except Exception:
+        # Sin el fichero se sigue: puede estar en el entorno de la terminal.
+        pass
+
+
 def _cliente():
+    _cargar_clave()
     if not os.environ.get("ELEVENLABS_API_KEY"):
         raise SinClave(
             "Falta ELEVENLABS_API_KEY.\n"
-            "  1. Crea una cuenta gratis en elevenlabs.io (10.000 caracteres al mes)\n"
-            "  2. Copia la clave de elevenlabs.io/app/settings/api-keys\n"
-            "  3. Ejecuta:  make activar"
+            "  1. Copia la clave de elevenlabs.io/app/developers/api-keys\n"
+            "  2. Ejecuta:  ./scripts/activar.sh elevenlabs <la clave>\n"
+            "     (o 'make activar' si la tienes en el portapapeles)"
         )
     try:
         from elevenlabs.client import ElevenLabs
