@@ -1132,3 +1132,97 @@ def test_running_out_of_credits_is_explained_in_plain_words():
     assert "creditos" in voice._explicar_eleven(
         "status 429: quota_exceeded").lower()
     assert "clave" in voice._explicar_eleven("401 unauthorized").lower()
+
+
+class _PlanFalso:
+    def __init__(self, tier, usados=0, limite=0):
+        self.tier, self.character_count, self.character_limit = tier, usados, limite
+
+
+class _ClienteFalso:
+    def __init__(self, tier, catalogo):
+        self._tier, self._catalogo = tier, catalogo
+        self.pedido = {}
+
+        cliente = self
+
+        class _Sub:
+            @staticmethod
+            def get():
+                return _PlanFalso(cliente._tier, 40000, 100000)
+
+        class _User:
+            subscription = _Sub()
+
+        class _Voz:
+            def __init__(self, d):
+                self.language = "es"
+                self.__dict__.update(d)
+                self.description = d.get("descripcion", "")
+
+        class _Voices:
+            @staticmethod
+            def get_shared(**kw):
+                cliente.pedido.update(kw)
+                return type("R", (), {
+                    "voices": [_Voz(v) for v in cliente._catalogo]})()
+
+            @staticmethod
+            def search(**kw):
+                return type("R", (), {"voices": []})()
+
+        self.user, self.voices = _User(), _Voices()
+
+
+CATALOGO_MIXTO = [
+    {"voice_id": "libre", "name": "Libre", "accent": "es-latin-american",
+     "descripcion": "", "public_owner_id": "o1", "free_users_allowed": True},
+    {"voice_id": "premium", "name": "Premium", "accent": "es-latin-american",
+     "descripcion": "", "public_owner_id": "o2", "free_users_allowed": False},
+]
+
+
+def test_a_paid_plan_sees_the_voices_the_free_one_cannot_use():
+    """En el plan gratuito esas voces darían un error de permisos, así que se
+    esconden. Esconderlas en un plan de pago solo quita opciones buenas."""
+    c = _ClienteFalso("creator", CATALOGO_MIXTO)
+    nombres = {v["name"] for v in voces._catalogo(c, solo_gratis=False)}
+    assert nombres == {"Libre", "Premium"}
+
+
+def test_a_free_plan_is_not_offered_voices_it_cannot_use():
+    c = _ClienteFalso("free", CATALOGO_MIXTO)
+    nombres = {v["name"] for v in voces._catalogo(c, solo_gratis=True)}
+    assert nombres == {"Libre"}
+
+
+def test_the_plan_decides_which_catalogue_is_shown():
+    de_pago = _ClienteFalso("creator", CATALOGO_MIXTO)
+    lista, p = voces._todas(de_pago)
+    assert p["gratis"] is False
+    assert len(lista) == 2
+
+    gratis = _ClienteFalso("free", CATALOGO_MIXTO)
+    lista, p = voces._todas(gratis)
+    assert p["gratis"] is True
+    assert len(lista) == 1
+
+
+def test_an_unreadable_plan_does_not_stop_you_choosing_a_voice():
+    """Que la API de suscripción falle no puede impedir configurar la voz."""
+    c = _ClienteFalso("creator", CATALOGO_MIXTO)
+
+    def explota():
+        raise RuntimeError("503")
+
+    c.user.subscription.get = explota
+    p = voces.plan(c)
+    assert p["gratis"] is True          # se asume lo más restrictivo
+    assert p["tier"] is None
+
+
+def test_the_remaining_characters_are_shown_in_plain_spanish():
+    texto = voces.describir_plan(
+        {"tier": "creator", "usados": 40000, "limite": 100000})
+    assert "creator" in texto
+    assert "60.000" in texto
